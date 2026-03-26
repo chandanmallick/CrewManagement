@@ -1,0 +1,154 @@
+/* ===== Layout container ===== */
+
+.app-layout{
+  display:flex;
+}
+
+/* ===== Sidebar ===== */
+
+.sidebar{
+  position:fixed;
+  top:20px;
+  left:20px;
+  bottom:20px;
+
+  width:70px;
+
+  background:white;
+  border-radius:20px;
+
+  box-shadow:0 15px 40px rgba(0,0,0,0.08);
+
+  display:flex;
+  flex-direction:column;
+
+  padding:15px;
+
+  overflow:hidden;
+
+  z-index:1000;
+
+  transition:width .35s cubic-bezier(.4,0,.2,1);
+}
+
+.sidebar.open{
+  width:230px;
+}
+
+/* ===== Logo ===== */
+
+.sidebar-logo{
+  font-weight:600;
+  margin-bottom:20px;
+  text-align:center;
+  white-space:nowrap;
+}
+
+/* ===== Sections ===== */
+
+.sidebar-section{
+  display:flex;
+  flex-direction:column;
+}
+
+.sidebar-section p{
+  font-size:11px;
+  color:#9aa0ac;
+  margin:10px 0 5px;
+}
+
+/* ===== Menu item ===== */
+
+.sidebar-item{
+  display:flex;
+  align-items:center;
+  gap:12px;
+
+  padding:10px;
+  margin:4px 0;
+
+  border-radius:10px;
+
+  text-decoration:none;
+  color:#3a3f52;
+
+  transition:background .2s ease, color .2s ease;
+}
+
+/* hide label when collapsed */
+
+.sidebar:not(.open) .sidebar-item span{
+  opacity:0;
+  width:0;
+  overflow:hidden;
+}
+
+/* show label smoothly */
+
+.sidebar.open .sidebar-item span{
+  opacity:1;
+  width:auto;
+}
+
+/* hover */
+
+.sidebar-item:hover{
+  background:#eef2ff;
+  color:#6366f1;
+}
+
+/* active */
+
+.sidebar-item.active{
+  background:#6366f1;
+  color:white;
+}
+
+/* ===== User section ===== */
+
+.sidebar-user{
+  margin-top:auto;
+  padding-top:10px;
+}
+
+.sidebar-user button{
+  margin-top:5px;
+  width:100%;
+
+  background:#ef4444;
+  color:white;
+
+  border:none;
+  padding:6px;
+
+  border-radius:8px;
+
+  cursor:pointer;
+}
+
+/* ===== Main content area ===== */
+
+.app-content{
+  margin-left:110px;     /* sidebar collapsed width + gap */
+  padding:30px;
+  width:calc(100% - 110px);
+
+  transition:margin-left .35s cubic-bezier(.4,0,.2,1),
+             width .35s cubic-bezier(.4,0,.2,1);
+}
+
+/* when sidebar expands */
+
+.sidebar.open ~ .app-content{
+  margin-left:270px;     /* sidebar expanded width + gap */
+  width:calc(100% - 270px);
+}
+
+.custom-datepicker {
+  width: 100%;
+}
+
+.custom-datepicker input {
+  width: 100% !important;
+  border: none;
+}

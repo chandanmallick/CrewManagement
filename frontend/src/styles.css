@@ -1,0 +1,163 @@
+body{
+  background:#f5f6fb;
+}
+
+/* overall layout */
+
+.app-layout{
+  display:flex;
+}
+
+/* Sidebar */
+
+.sidebar{
+  position:fixed;
+  top:20px;
+  left:20px;
+  bottom:20px;
+
+  width:72px;
+
+  background:linear-gradient(180deg,#0f4c81,#1976d2);
+
+  border-radius:28px;
+  z-index:1000;
+
+  padding:14px;
+
+  display:flex;
+  flex-direction:column;
+
+  transition:width .35s cubic-bezier(.4,0,.2,1);
+}
+
+/* expanded */
+
+.sidebar.open{
+  width:240px;
+}
+
+/* logo */
+
+.sidebar-logo{
+  color:white;
+  font-weight:600;
+  text-align:center;
+  margin-bottom:20px;
+  white-space:nowrap;
+}
+
+/* sections */
+
+.sidebar-section{
+  display:flex;
+  flex-direction:column;
+}
+
+/* item */
+
+.sidebar-item{
+
+  display:flex;
+  align-items:center;
+  gap:14px;
+
+  padding:12px;
+
+  margin:4px 0;
+
+  border-radius:12px;
+
+  color:white;
+
+  text-decoration:none;
+
+  transition:all .25s ease;
+
+}
+
+/* icon */
+
+.sidebar-icon{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-width:24px;
+}
+
+/* label */
+
+.sidebar-label{
+
+  opacity:0;
+  transform:translateX(-10px);
+
+  transition:all .25s ease;
+
+  white-space:nowrap;
+
+}
+
+/* show label when open */
+
+.sidebar.open .sidebar-label{
+
+  opacity:1;
+  transform:translateX(0);
+
+}
+
+/* hover */
+
+.sidebar-item:hover{
+  background:rgba(255,255,255,.18);
+}
+
+/* active */
+
+.sidebar-item.active{
+  background:white;
+  color:#1976d2;
+  font-weight:500;
+}
+
+/* user */
+
+.sidebar-user{
+  margin-top:auto;
+  color:white;
+  font-size:13px;
+}
+
+.sidebar-user button{
+
+  margin-top:8px;
+  width:100%;
+
+  border:none;
+
+  background:#ef4444;
+
+  color:white;
+
+  padding:6px;
+
+  border-radius:8px;
+
+  cursor:pointer;
+
+}
+
+/* main content */
+
+.app-content{
+
+  margin-left:280px;   /* reserve space for sidebar */
+
+  padding:30px;
+
+  width:calc(100% - 280px);
+
+  transition:all .35s cubic-bezier(.4,0,.2,1);
+
+}
