@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+// import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { useState } from "react";
 
 import Layout from "./layout/Layout";
@@ -18,6 +19,7 @@ import LoginPage from "./components/LoginPage";
 import Profile from "./components/Profile";
 import AdminLoginHistory from "./components/AdminLoginHistory";
 import DepartmentChart from "./components/DepartmentChart";
+import ShiftHistoryAdmin from "./components/ShiftHistoryAdmin";
 
 import "./styles.css";
 
@@ -68,6 +70,7 @@ function App() {
                   <Route path="/employee" element={<EmployeeMaster />} />
                   <Route path="/dropdown" element={<DropdownMaster />} />
                   <Route path="/duty-leave" element={<DutyLeaveMaster />} />
+                  <Route path="/shift-history-admin" element={<ShiftHistoryAdmin />} />
 
                   <Route
                     path="/admin/login-history"

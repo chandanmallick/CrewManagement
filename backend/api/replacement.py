@@ -3,6 +3,7 @@ from bson import ObjectId
 from admin_logic.auth_utils import check_replacement_access, get_current_user
 from datetime import datetime, timedelta
 from typing import Optional
+from admin_logic.notification_service import notify_all
 
 import pytz
 
@@ -36,41 +37,6 @@ from email.mime.text import MIMEText
 
 EMAIL = "erldccroomcrew@gmail.com"
 PASSWORD = "yfwj mqbg geiz vltv"
-
-
-def send_email(to_list, subject, body):
-
-    print("========== EMAIL DEBUG START ==========")
-    print("Recipients:", to_list)
-
-    try:
-        # ✅ Create email
-        msg = MIMEText(body)
-        msg["Subject"] = subject
-        msg["From"] = EMAIL
-        msg["To"] = ", ".join(to_list)
-
-        print("Step 1: Connecting to Gmail SMTP...")
-
-        server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.starttls()
-
-        print("Step 2: Logging in...")
-
-        server.login(EMAIL, PASSWORD)
-
-        print("Step 3: Sending mail...")
-
-        server.sendmail(EMAIL, to_list, msg.as_string())
-
-        server.quit()
-
-        print("✅ Mail sent successfully")
-
-    except Exception as e:
-        print("❌ MAIL ERROR:", str(e))
-
-    print("========== EMAIL DEBUG END ==========")
 
 
 # =========================================================
@@ -653,7 +619,26 @@ def assign_replacement(leave_id: str, payload: dict, user=Depends(get_current_us
 
     # 🔥 SEND EMAIL
     if email_list:
-        send_email(email_list, subject, body)
+        notify_all(
+            email_list=email_list,
+            employee_ids=[
+                leave["employeeId"],
+                replacement_emp["userId"]
+            ],
+            subject=f"Duty Assigned: {assigned_duty}",
+            message=f"""
+        Replacement Assigned
+
+        Date: {leave_date}
+        Group: {leave.get("groupName")}
+
+        Leave: {leave.get("name")}
+        Replacement: {replacement_emp.get("name")}
+
+        Duty: {assigned_duty}
+        Mode: {mode}
+        """
+        )
 
 
     

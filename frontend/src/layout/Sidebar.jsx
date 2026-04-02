@@ -94,6 +94,7 @@ export default function Sidebar({ open, setOpen }) {
 
           <Item to="/employee" icon={<UserCog size={20}/>} label="Employee Master"/>
           <Item to="/dropdown" icon={<Settings size={20}/>} label="Dropdown Management"/>
+          <Item to="/shift-history-admin" icon={<Settings size={20}/>} label="Shift History"/>
 
           <Item
             to="/admin/login-history"

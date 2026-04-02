@@ -25,6 +25,9 @@ import {
   Typography,
   DialogActions,
   MenuItem,
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   FormControlLabel
 } from "@mui/material";
 import IconButton from "@mui/material/IconButton";
@@ -39,9 +42,10 @@ export default function LeaveManagement() {
   const [selectedEmp, setSelectedEmp] = useState(null);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [replacementRequired, setReplacementRequired] = useState(false);
-  const [forwardLeaveId, setForwardLeaveId] = useState(null);
-  const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
+  const [actionState, setActionState] = useState({});
+  // const [replacementRequired, setReplacementRequired] = useState(false);
+  // const [forwardLeaveId, setForwardLeaveId] = useState(null);
+  // const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
 
 
   const [dutyRows, setDutyRows] = useState([]);
@@ -68,6 +72,19 @@ export default function LeaveManagement() {
   const [selectedDays, setSelectedDays] = useState([]);
 
   const isAdmin = localStorage.getItem("role") === "admin";
+  const [selectedLeaves, setSelectedLeaves] = useState([]);
+
+  const [forwardDialog, setForwardDialog] = useState(false);
+  const [selectedLeaveObjects, setSelectedLeaveObjects] = useState([]);
+  const [replacementMap, setReplacementMap] = useState({});
+
+  const [role, setRole] = useState({});
+
+  useEffect(() => {
+    api.get("/leave/my-role").then(res => {
+      setRole(res.data);
+    });
+  }, []);
 
   useEffect(() => {
     const empId = localStorage.getItem("employeeId");
@@ -101,6 +118,14 @@ export default function LeaveManagement() {
       setIsDeptIC(res.data.isDeptIC);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const toggleLeave = (id) => {
+    if (selectedLeaves.includes(id)) {
+      setSelectedLeaves(selectedLeaves.filter(x => x !== id));
+    } else {
+      setSelectedLeaves([...selectedLeaves, id]);
     }
   };
 
@@ -138,12 +163,13 @@ export default function LeaveManagement() {
 
     setLeaveTypes(res.data);
   };
+  
 
 
   const fetchDuty = async () => {
 
     if (!selectedEmp || selectedDays.length === 0) {
-      alert("Select employee and dates");
+      setStatusPopup({open: true, type: "success", message: "Select employee and dates"});
       return;
     }
 
@@ -174,8 +200,8 @@ export default function LeaveManagement() {
 
     } catch (err) {
       console.error(err);
-      alert("Duty fetch failed");
-    }
+      setStatusPopup({open: true, type: "error", message: "Duty fetch failed"});
+          }
 
   };
 
@@ -197,62 +223,76 @@ export default function LeaveManagement() {
     setDutyRows(updated);
   };
 
+  const [statusPopup, setStatusPopup] = useState({
+    open: false,
+    type: "success",
+    message: ""
+  });
+
   const applyLeave = async () => {
 
-    const selectedRows = dutyRows.filter((r) => r.selected);
+    const selectedRows = dutyRows.filter(r => r.selected);
 
     if (selectedRows.length === 0) {
-      alert("Select at least one day");
+      setStatusPopup({
+        open: true,
+        type: "success",
+        message: "Select at least one day"
+      });
       return;
     }
 
     if (!reason) {
-      alert("Enter reason");
+      setStatusPopup({open: true, type: "success", message: "Leave Applied Successfully"});
       return;
     }
 
     try {
 
-      for (let d of selectedDays) {
-        const date = dayjs(d.toDate()).format("YYYY-MM-DD");
+      const selectedRows = dutyRows.filter(r => r.selected);
 
-        await api.post("/leave/apply", {
-          employeeId: selectedEmp.employeeId,
-          date,
-          leaveType: selectedRows[0]?.leaveType,
-          reason
-        });
-      }
+      const dates = selectedRows.map(r => r.date);
 
-      alert("Leave Applied Successfully");
+      await api.post("/leave/apply", {
+        employeeId: selectedEmp.employeeId,
+        dates: dates,   // 🔥 send exact selected dates
+        leaveType: selectedRows[0]?.leaveType,
+        reason
+      });
+
+      setStatusPopup({open: true, type: "success", message: "Leave Applied Successfully"});
+
       setDutyRows([]);
       setReason("");
       fetchLeaveList();
 
     } catch (err) {
       console.error(err);
-      alert("Error applying leave");
-    }
-
-  };
-
-  const confirmForward = async () => {
-
-    try {
-
-      await api.put(`/leave/sic-forward/${forwardLeaveId}`, {
-        replacementRequired: replacementRequired
+      setStatusPopup({
+        open: true,
+        type: "error",
+        message: "Error applying leave"
       });
-
-      setForwardDialogOpen(false);
-      setForwardLeaveId(null);
-
-      fetchLeaveList();
-
-    } catch (err) {
-      console.error(err);
-    }
+          }
   };
+
+  // const confirmForward = async () => {
+
+  //   try {
+
+  //     await api.put(`/leave/sic-forward/${forwardLeaveId}`, {
+  //       replacementRequired: replacementRequired
+  //     });
+
+  //     setForwardDialogOpen(false);
+  //     setForwardLeaveId(null);
+
+  //     fetchLeaveList();
+
+  //   } catch (err) {
+  //     console.error(err);
+  //   }
+  // };
 
   const filteredApprovedLeaves = approvedLeaves.filter(l =>
     dayjs(l.date).format("YYYY-MM") === approvedMonth
@@ -265,8 +305,27 @@ export default function LeaveManagement() {
   );
 
   const approveLeave = async (id) => {
-    await api.put(`/leave/approve/${id}`);
-    fetchLeaveList();
+
+    try {
+      await api.put("/leave/approve-bulk", {
+        leaveIds: [id]   // 🔥 send single id as array
+      });
+
+      setStatusPopup({
+        open: true,
+        type: "success",
+        message: "Leave Applied Successfully"
+      });
+      fetchLeaveList();
+
+    } catch (err) {
+      console.error(err);
+      setStatusPopup({
+        open: true,
+        type: "error",
+        message: "Error applying leave"
+      });
+          }
   };
 
   const withdrawLeave = async (id) => {
@@ -326,6 +385,78 @@ export default function LeaveManagement() {
       console.error(err);
       alert("Error reverting leave");
     }
+  };
+
+
+  // ========================================
+  // 🔥 MODERN BUTTON (Reusable Across App)
+  // ========================================
+  const ModernButton = ({
+    label,
+    onClick,
+    id,
+    color = "#5b6cff"
+  }) => {
+
+    const state = actionState[id] || "idle";
+
+    return (
+      <Button
+        onClick={async () => {
+
+          try {
+            setActionState(prev => ({ ...prev, [id]: "loading" }));
+
+            await onClick();
+
+            setActionState(prev => ({ ...prev, [id]: "success" }));
+
+            setTimeout(() => {
+              setActionState(prev => ({ ...prev, [id]: "idle" }));
+            }, 1500);
+
+          } catch (err) {
+
+            setActionState(prev => ({ ...prev, [id]: "error" }));
+
+            setTimeout(() => {
+              setActionState(prev => ({ ...prev, [id]: "idle" }));
+            }, 1500);
+
+          }
+        }}
+        sx={{
+          textTransform: "none",
+          borderRadius: 3,
+          px: 2,
+          py: 0.8,
+          fontSize: 12,
+          fontWeight: 500,
+          minWidth: 90,
+
+          background:
+            state === "success" ? "#2e7d32" :
+            state === "error" ? "#d32f2f" :
+            color,
+
+          color: "white",
+
+          transition: "all 0.25s ease",
+
+          "&:hover": {
+            background:
+              state === "success" ? "#256d27" :
+              state === "error" ? "#b71c1c" :
+              "#4a5ae0"
+          }
+        }}
+      >
+        {state === "loading" && "Processing..."}
+        {state === "success" && "✓ Done"}
+        {state === "error" && "Failed"}
+        {state === "idle" && label}
+      </Button>
+    );
   };
 
   return (
@@ -491,6 +622,7 @@ export default function LeaveManagement() {
 
           <Typography variant="h6">Duty List</Typography>
           <Divider sx={{ mb: 2 }} />
+          
 
           <Table size="small">
 
@@ -614,534 +746,670 @@ export default function LeaveManagement() {
       {/* Pending LEAVE UPDATES */}
 
       {/* PENDING LEAVE */}
+      <Accordion defaultExpanded>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />} 
+          sx={{
+          background: "linear-gradient(90deg,#1e3c72,#2a5298)",
+          color: "white",
+          borderRadius: 2
+        }}>
+          <Typography fontWeight="bold">
+            Pending Leave Updates
+          </Typography>
+        </AccordionSummary>
 
-      <SectionHeader
-        title="Pending Leave Updates"
-        open={pendingOpen}
-        toggle={() => setPendingOpen(!pendingOpen)}
-      />
+        <AccordionDetails>
 
-      {pendingOpen && (
-        <Paper sx={{ p: 3, mt: 2, mb: 4 }}>
-          <Table size="small">
+          {pendingOpen && (
+            <Paper sx={{ p: 3, mt: 2, mb: 4 }}>
 
-            <TableHead>
-              <TableRow sx={{ background: "#1b5e20" }}>
-                <TableCell sx={{ color: "white" }}>Name</TableCell>
-                <TableCell sx={{ color: "white" }}>Group</TableCell>
-                <TableCell sx={{ color: "white" }}>Leave Period</TableCell>
-                <TableCell sx={{ color: "white" }}>Type</TableCell>
-                <TableCell sx={{ color: "white" }}>Others On Leave</TableCell>
-                <TableCell sx={{ color: "white" }}>SIC</TableCell>
-                <TableCell sx={{ color: "white" }}>Dept</TableCell>
-                <TableCell sx={{ color: "white" }}>Final</TableCell>
-                <TableCell sx={{ color: "white" }}>Replacement</TableCell>
-                <TableCell sx={{ color: "white" }}>Action</TableCell>
-              </TableRow>
-            </TableHead>
+              <Box
+                sx={{
+                  display: "flex",
+                  gap: 2,
+                  mb: 2,
+                  p: 1.5,
+                  borderRadius: 2,
+                  background: "#f4f6fb"
+                }}
+              >
 
-            <TableBody>
+                {role.isSIC && (
+                  <ModernButton
+                    id="bulk-forward"
+                    label="Forward"
+                    color="#6a1b9a"
+                    onClick={async () => {
 
-              {leaveUpdates.map((l) => (
-                <TableRow key={l.id}>
+                      const payload = selectedLeaves.map(id => ({
+                        id,
+                        replacementRequired: false
+                      }));
 
-                  <TableCell>{l.name}</TableCell>
+                      await api.put("/leave/sic-forward-bulk", {
+                        leaves: payload
+                      });
 
-                  <TableCell>{l.groupName}</TableCell>
+                      fetchLeaveList();
+                      setSelectedLeaves([]);
+                    }}
+                  />
+                )}
 
-                  <TableCell>
-                    {dayjs(l.startDate).format("DD MMM")} → {dayjs(l.endDate).format("DD MMM")}
-                  </TableCell>
+                {role.isDeptIC && (
+                  <ModernButton
+                    id="bulk-approve"
+                    label="Approve"
+                    color="#2e7d32"
+                    onClick={async () => {
 
-                  <TableCell>{l.leaveType}</TableCell>
+                      await api.put("/leave/approve-bulk", {
+                        leaveIds: selectedLeaves
+                      });
 
-                  <TableCell>
-                    {l.othersOnLeave?.length > 0
-                      ? l.othersOnLeave.map((o) => (
-                          <Chip
-                            key={o.employeeId}
-                            label={o.name}
-                            size="small"
-                            color="warning"
-                            sx={{ mr: 1 }}
-                          />
-                        ))
-                      : "-"}
-                  </TableCell>
+                      fetchLeaveList();
+                      setSelectedLeaves([]);
+                    }}
+                  />
+                )}
 
-                  {/* SIC STATUS */}
-                  <TableCell>
-                    <Chip
-                      label={l.sicApprovalStatus || "Pending"}
-                      size="small"
-                      sx={{
-                        backgroundColor:
-                          l.sicApprovalStatus === "Forwarded"
-                            ? "#1976d2"
-                            : "#ed6c02",
-                        color: "white"
-                      }}
-                    />
-                  </TableCell>
+                {role.isDeptIC && (
+                  <ModernButton
+                    id="bulk-reject"
+                    label="Reject"
+                    color="#d32f2f"
+                    onClick={async () => {
 
-                  {/* DEPT STATUS */}
-                  <TableCell>
-                    <Chip
-                      label={l.deptApprovalStatus || "Pending"}
-                      size="small"
-                      sx={{
-                        backgroundColor:
-                          l.deptApprovalStatus === "Approved"
-                            ? "#2e7d32"
-                            : "#ed6c02",
-                        color: "white"
-                      }}
-                    />
-                  </TableCell>
+                      for (let id of selectedLeaves) {
+                        await api.put(`/leave/dept-reject/${id}`);
+                      }
 
-                  {/* FINAL STATUS */}
-                  <TableCell>
-                    <Chip
-                      label={l.finalStatus}
-                      size="small"
-                      sx={{
-                        backgroundColor:
-                          l.finalStatus === "Approved"
-                            ? "#2e7d32"
-                            : l.finalStatus === "Rejected"
-                            ? "#d32f2f"
-                            : "#ed6c02",
-                        color: "white"
-                      }}
-                    />
-                  </TableCell>
+                      fetchLeaveList();
+                      setSelectedLeaves([]);
+                    }}
+                  />
+                )}
 
-                  {/* REPLACEMENT */}
-                  <TableCell>
-                    {l.replacement ? (
-                      <Chip
-                        label={l.replacement.name}
-                        size="small"
-                        color="success"
-                      />
-                    ) : l.replacementRequired ? (
-                      <Chip
-                        label="Required"
-                        size="small"
-                        color="error"
-                      />
-                    ) : (
-                      <Chip
-                        label="Not Required"
-                        size="small"
-                      />
-                    )}
-                  </TableCell>
+              </Box>
 
-                  {/* ACTION BUTTONS */}
-                  <TableCell>
+              <Table size="small">
 
-                    <Box
-                      sx={{
-                        display: "flex",
-                        gap: 1,
-                        flexWrap: "wrap",   // 🔥 allows wrapping properly
-                        alignItems: "center"
-                      }}
-                    >
+                <TableHead>
+                  <TableRow sx={{ background: "#1b5e20" }}>
+                    <TableCell sx={{ color: "white" }}>Select</TableCell>
+                    <TableCell sx={{ color: "white" }}>Name</TableCell>
+                    <TableCell sx={{ color: "white" }}>Group</TableCell>
+                    <TableCell sx={{ color: "white" }}>Leave Period</TableCell>
+                    <TableCell sx={{ color: "white" }}>Type</TableCell>
+                    <TableCell sx={{ color: "white" }}>Others On Leave</TableCell>
+                    <TableCell sx={{ color: "white" }}>SIC</TableCell>
+                    <TableCell sx={{ color: "white" }}>Dept</TableCell>
+                    <TableCell sx={{ color: "white" }}>Final</TableCell>
+                    <TableCell sx={{ color: "white" }}>Replacement</TableCell>
+                    <TableCell sx={{ color: "white" }}>Action</TableCell>
+                  </TableRow>
+                </TableHead>
 
-                      {!isSIC &&
-                        !isDeptIC &&
-                        l.finalStatus === "Applied" &&
-                        l.name === localStorage.getItem("name") && (
-                          <Button
-                            size="small"
-                            variant="contained"
-                            sx={{ background: "#8e24aa" }}
-                            onClick={() => withdrawLeave(l.id)}
-                          >
-                            Withdraw
-                          </Button>
-                        )}
+                <TableBody>
 
-                      {isSIC &&
-                        l.finalStatus === "Applied" &&
-                        l.sicApprovalStatus !== "Forwarded" && (
-                          <>
-                            <Button
-                              size="small"
-                              variant="contained"
-                              sx={{ background: "#6a1b9a", mr: 1 }}
-                              onClick={() => {
-                                setForwardLeaveId(l.id);
-                                setReplacementRequired(false);
-                                setForwardDialogOpen(true);
-                              }}
-                            >
-                              Forward
-                            </Button>
+                  {leaveUpdates.map((l) => (
+                    <TableRow key={l.id}>
 
-                            <Button
-                              size="small"
-                              color="error"
-                              onClick={() => rejectLeaveSIC(l.id)}
-                            >
-                              Reject
-                            </Button>
-                          </>
-                        )}
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedLeaves.includes(l.id)}
+                          onChange={() => toggleLeave(l.id)}
+                        />
+                      </TableCell>
 
-                      {isDeptIC &&
-                        l.sicApprovalStatus === "Forwarded" &&
-                        l.deptApprovalStatus !== "Approved" && (
-                          <>
-                            <Button
-                              size="small"
-                              variant="contained"
-                              sx={{ background: "#43a047", mr: 1 }}
-                              onClick={() => approveLeave(l.id)}
-                            >
-                              Approve
-                            </Button>
+                      <TableCell>{l.name}</TableCell>
 
-                            <Button
-                              size="small"
-                              variant="contained"
-                              color="error"
-                              onClick={() => rejectLeaveSIC(l.id)}
-                            >
-                              Reject
-                            </Button>
-                          </>
-                      )}
+                      <TableCell>{l.groupName}</TableCell>
 
-                      {isAdmin && (
-                        <Button
+                      <TableCell>
+                        {dayjs(l.date).format("DD MMM YYYY")}
+                      </TableCell>
+
+                      <TableCell>{l.leaveType}</TableCell>
+
+                      <TableCell>
+                        {l.othersOnLeave?.length > 0
+                          ? l.othersOnLeave.map((o) => (
+                              <Chip
+                                key={o.employeeId}
+                                label={o.name}
+                                size="small"
+                                color="warning"
+                                sx={{ mr: 1 }}
+                              />
+                            ))
+                          : "-"}
+                      </TableCell>
+
+                      {/* SIC STATUS */}
+                      <TableCell>
+                        <Chip
+                          label={l.sicApprovalStatus || "Pending"}
                           size="small"
-                          variant="contained"
-                          color="error"
-                          sx={{ mt: 1 }}
-                          onClick={() => superDeleteLeave(l.id)}
-                        >
-                          Super Delete
-                        </Button>
-                      )}
+                          sx={{
+                            backgroundColor:
+                              l.sicApprovalStatus === "Forwarded"
+                                ? "#1976d2"
+                                : "#ed6c02",
+                            color: "white"
+                          }}
+                        />
+                      </TableCell>
 
-                    </Box>
+                      {/* DEPT STATUS */}
+                      <TableCell>
+                        <Chip
+                          label={l.deptApprovalStatus || "Pending"}
+                          size="small"
+                          sx={{
+                            backgroundColor:
+                              l.deptApprovalStatus === "Approved"
+                                ? "#2e7d32"
+                                : "#ed6c02",
+                            color: "white"
+                          }}
+                        />
+                      </TableCell>
 
-                  </TableCell>
+                      {/* FINAL STATUS */}
+                      <TableCell>
+                        <Chip
+                          label={l.finalStatus}
+                          size="small"
+                          sx={{
+                            backgroundColor:
+                              l.finalStatus === "Approved"
+                                ? "#2e7d32"
+                                : l.finalStatus === "Rejected"
+                                ? "#d32f2f"
+                                : "#ed6c02",
+                            color: "white"
+                          }}
+                        />
+                      </TableCell>
 
-                </TableRow>
-              ))}
+                      {/* REPLACEMENT */}
+                      <TableCell>
+                        {l.replacementRequired ? (
+                          <Chip
+                            label="✓ Replacement Required"
+                            size="small"
+                            sx={{ background: "#fdecea", color: "#d32f2f" }}
+                          />
+                        ) : (
+                          <Chip label="Not Required" size="small" />
+                        )}
+                      </TableCell>
 
-            </TableBody>
+                      {/* ACTION BUTTONS */}
+                      <TableCell>
+                        -
+                      </TableCell>
 
-          </Table>
-        </Paper>
-      )}
+                    </TableRow>
+                  ))}
+
+                </TableBody>
+
+              </Table>
+            </Paper>
+          )}
+        </AccordionDetails>
+      </Accordion>
+      
 
       {/* Approve LEAVE  */}
 
       {/* APPROVED LEAVE */}
 
-      <SectionHeader
-        title="Approved Leave Updates"
-        open={approvedOpen}
-        toggle={() => setApprovedOpen(!approvedOpen)}
-      />
-
-      {approvedOpen && (
-        <Paper sx={{ p: 3, mt: 2, mb: 4 }}>
-
-          {/* FILTER BAR */}
-          <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-
-            <TextField
-              type="month"
-              label="Select Month"
-              InputLabelProps={{ shrink: true }}
-              value={approvedMonth}
-              onChange={(e) => {
-                setApprovedMonth(e.target.value);
-                setApprovedPage(0);
-              }}
-            />
-
-            <TextField
-              select
-              label="Rows"
-              value={rowsPerPage}
-              onChange={(e) => setRowsPerPage(Number(e.target.value))}
-              sx={{ width: 120 }}
-            >
-              <MenuItem value={10}>10</MenuItem>
-              <MenuItem value={20}>20</MenuItem>
-            </TextField>
-
-          </Box>
-
-          <Table size="small">
-
-            <TableHead>
-              <TableRow sx={{ background: "#1b5e20" }}>
-                <TableCell sx={{ color: "white" }}>Name</TableCell>
-                <TableCell sx={{ color: "white" }}>Group</TableCell>
-                <TableCell sx={{ color: "white" }}>Leave Period</TableCell>
-                <TableCell sx={{ color: "white" }}>Type</TableCell>
-                <TableCell sx={{ color: "white" }}>SIC</TableCell>
-                <TableCell sx={{ color: "white" }}>Dept</TableCell>
-                <TableCell sx={{ color: "white" }}>Final</TableCell>
-                <TableCell sx={{ color: "white" }}>Replacement</TableCell>
-                <TableCell sx={{ color: "white" }}>Action</TableCell>
-              </TableRow>
-            </TableHead>
-
-            <TableBody>
-
-              {paginatedApprovedLeaves.map((l) => (
-                <TableRow key={l.id}>
-
-                  <TableCell>{l.name}</TableCell>
-
-                  <TableCell>{l.groupName}</TableCell>
-
-                  <TableCell>
-                    {dayjs(l.startDate).format("DD MMM")} → {dayjs(l.endDate).format("DD MMM")}
-                  </TableCell>
-
-                  <TableCell>{l.leaveType}</TableCell>
-
-                  {/* SIC STATUS */}
-                  <TableCell>
-                    <Chip
-                      label={l.sicApprovalStatus || "Pending"}
-                      size="small"
-                      sx={{
-                        backgroundColor:
-                          l.sicApprovalStatus === "Forwarded"
-                            ? "#1976d2"
-                            : "#ed6c02",
-                        color: "white"
-                      }}
-                    />
-                  </TableCell>
-
-                  {/* DEPT STATUS */}
-                  <TableCell>
-                    <Chip
-                      label={l.deptApprovalStatus || "Pending"}
-                      size="small"
-                      sx={{
-                        backgroundColor:
-                          l.deptApprovalStatus === "Approved"
-                            ? "#2e7d32"
-                            : "#ed6c02",
-                        color: "white"
-                      }}
-                    />
-                  </TableCell>
-
-                  {/* FINAL STATUS */}
-                  <TableCell>
-                    <Chip
-                      label={l.finalStatus}
-                      size="small"
-                      sx={{
-                        backgroundColor:
-                          l.finalStatus === "Approved"
-                            ? "#2e7d32"
-                            : l.finalStatus === "Rejected"
-                            ? "#d32f2f"
-                            : "#ed6c02",
-                        color: "white"
-                      }}
-                    />
-                  </TableCell>
-
-                  {/* REPLACEMENT */}
-                  <TableCell>
-                    {l.replacement ? (
-                      <Chip
-                        label={l.replacement.name}
-                        size="small"
-                        color="success"
-                      />
-                    ) : l.replacementRequired ? (
-                      <Chip
-                        label="Required"
-                        size="small"
-                        color="error"
-                      />
-                    ) : (
-                      <Chip
-                        label="Not Required"
-                        size="small"
-                      />
-                    )}
-                  </TableCell>
-
-                  <TableCell>
-                    {isAdmin && (
-                      <Button
-                        size="small"
-                        variant="contained"
-                        color="error"
-                        onClick={() => superDeleteLeave(l.id)}
-                      >
-                        Super Delete
-                      </Button>
-                    )}
-                  </TableCell>
-
-                </TableRow>
-              ))}
-
-            </TableBody>
-
-          </Table>
-
-        </Paper>
-      )}
-
-      {/* UPCOMING LEAVE */}
-
-      {/* UPCOMING LEAVE */}
-
-    <SectionHeader
-      title="Upcoming Leave (Next 5 Days)"
-      open={upcomingOpen}
-      toggle={() => setUpcomingOpen(!upcomingOpen)}
-    />
-
-    {upcomingOpen && (
-
-      <Paper sx={{ p: 3, mt: 2 }}>
-
-        <Table size="small">
-
-          <TableHead>
-            <TableRow sx={{ background: "#1b5e20" }}>
-              <TableCell sx={{ color: "white" }}>Name</TableCell>
-              <TableCell sx={{ color: "white" }}>Group</TableCell>
-              <TableCell sx={{ color: "white" }}>Leave Period</TableCell>
-              <TableCell sx={{ color: "white" }}>Type</TableCell>
-              <TableCell sx={{ color: "white" }}>Status</TableCell>
-              <TableCell sx={{ color: "white" }}>Replacement</TableCell>
-            </TableRow>
-          </TableHead>
-
-          <TableBody>
-
-            {upcomingLeaves.map((l) => (
-
-              <TableRow key={l.id}>
-
-                <TableCell>{l.name}</TableCell>
-
-                <TableCell>{l.groupName}</TableCell>
-
-                <TableCell>
-                  {dayjs(l.startDate).format("DD MMM")} → {dayjs(l.endDate).format("DD MMM")}
-                </TableCell>
-
-                <TableCell>{l.leaveType}</TableCell>
-
-                <TableCell>
-                  <Chip
-                    label={l.finalStatus}
-                    size="small"
-                    color={l.finalStatus === "Approved" ? "success" : "warning"}
-                  />
-                </TableCell>
-
-                <TableCell>
-                  {l.replacement ? (
-                    <Chip
-                      label={l.replacement.name}
-                      size="small"
-                      color="success"
-                    />
-                  ) : l.replacementRequired ? (
-                    <Chip
-                      label="Required"
-                      size="small"
-                      color="error"
-                    />
-                  ) : (
-                    <Chip
-                      label="Not Required"
-                      size="small"
-                    />
-                  )}
-                </TableCell>
-
-              </TableRow>
-
-            ))}
-
-          </TableBody>
-
-        </Table>
-
-      </Paper>
-
-    )}
-      
-      <Dialog
-        open={forwardDialogOpen}
-        onClose={() => setForwardDialogOpen(false)}
-        maxWidth="xs"
-        fullWidth
-      >
-
-        <DialogTitle
+      <Accordion expanded={approvedOpen} onChange={() => setApprovedOpen(!approvedOpen)}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}
           sx={{
-            background: "linear-gradient(135deg,#6a1b9a,#8e24aa)",
+            background: "linear-gradient(90deg,#43cea2,#185a9d)",
             color: "white",
-            fontWeight: "bold"
+            borderRadius: 2
           }}
         >
-          SIC Forward Approval
-        </DialogTitle>
-
-        <DialogContent sx={{ mt:2 }}>
-
-          <Typography variant="body1" sx={{ mb:2 }}>
-            Does this leave require a replacement?
+          <Typography fontWeight="bold" fontSize={16}>
+            Approved Leave Updates
           </Typography>
+        </AccordionSummary>
 
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={replacementRequired}
-                onChange={(e)=>setReplacementRequired(e.target.checked)}
-                color="error"
+        <AccordionDetails>
+        
+          <Paper sx={{ p: 3, mt: 2, mb: 4 }}>
+
+            {/* FILTER BAR */}
+            <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+
+              <TextField
+                type="month"
+                label="Select Month"
+                InputLabelProps={{ shrink: true }}
+                value={approvedMonth}
+                onChange={(e) => {
+                  setApprovedMonth(e.target.value);
+                  setApprovedPage(0);
+                }}
               />
-            }
-            label="Replacement Required"
-          />
+
+              <TextField
+                select
+                label="Rows"
+                value={rowsPerPage}
+                onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                sx={{ width: 120 }}
+              >
+                <MenuItem value={10}>10</MenuItem>
+                <MenuItem value={20}>20</MenuItem>
+              </TextField>
+
+            </Box>
+
+            <Table size="small">
+
+              <TableHead>
+                <TableRow sx={{ background: "#1b5e20" }}>
+                  <TableCell sx={{ color: "white" }}>Name</TableCell>
+                  <TableCell sx={{ color: "white" }}>Group</TableCell>
+                  <TableCell sx={{ color: "white" }}>Leave Period</TableCell>
+                  <TableCell sx={{ color: "white" }}>Type</TableCell>
+                  <TableCell sx={{ color: "white" }}>SIC</TableCell>
+                  <TableCell sx={{ color: "white" }}>Dept</TableCell>
+                  <TableCell sx={{ color: "white" }}>Final</TableCell>
+                  <TableCell sx={{ color: "white" }}>Replacement</TableCell>
+                  <TableCell sx={{ color: "white" }}>Action</TableCell>
+                </TableRow>
+              </TableHead>
+
+              <TableBody>
+
+                {paginatedApprovedLeaves.map((l) => (
+                  <TableRow key={l.id}>
+
+                    <TableCell>{l.name}</TableCell>
+
+                    <TableCell>{l.groupName}</TableCell>
+
+                    <TableCell>
+                      {dayjs(l.date).format("DD MMM YYYY")}
+                    </TableCell>
+
+                    <TableCell>{l.leaveType}</TableCell>
+
+                    {/* SIC STATUS */}
+                    <TableCell>
+                      <Chip
+                        label={l.sicApprovalStatus || "Pending"}
+                        size="small"
+                        sx={{
+                          backgroundColor:
+                            l.sicApprovalStatus === "Forwarded"
+                              ? "#1976d2"
+                              : "#ed6c02",
+                          color: "white"
+                        }}
+                      />
+                    </TableCell>
+
+                    {/* DEPT STATUS */}
+                    <TableCell>
+                      <Chip
+                        label={l.deptApprovalStatus || "Pending"}
+                        size="small"
+                        sx={{
+                          backgroundColor:
+                            l.deptApprovalStatus === "Approved"
+                              ? "#2e7d32"
+                              : "#ed6c02",
+                          color: "white"
+                        }}
+                      />
+                    </TableCell>
+
+                    {/* FINAL STATUS */}
+                    <TableCell>
+                      <Chip
+                        label={l.finalStatus}
+                        size="small"
+                        sx={{
+                          backgroundColor:
+                            l.finalStatus === "Approved"
+                              ? "#2e7d32"
+                              : l.finalStatus === "Rejected"
+                              ? "#d32f2f"
+                              : "#ed6c02",
+                          color: "white"
+                        }}
+                      />
+                    </TableCell>
+
+                    {/* REPLACEMENT */}
+                    <TableCell>
+                      {l.replacement ? (
+                        <Chip
+                          label={l.replacement.name}
+                          size="small"
+                          color="success"
+                        />
+                      ) : l.replacementRequired ? (
+                        <Chip
+                          label="Required"
+                          size="small"
+                          color="error"
+                        />
+                      ) : (
+                        <Chip
+                          label="Not Required"
+                          size="small"
+                        />
+                      )}
+                    </TableCell>
+
+                    <TableCell>
+                      {isAdmin && (
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="error"
+                          onClick={() => superDeleteLeave(l.id)}
+                        >
+                          Super Delete
+                        </Button>
+                      )}
+                    </TableCell>
+
+                  </TableRow>
+                ))}
+
+              </TableBody>
+
+            </Table>
+
+          </Paper>
+
+        </AccordionDetails>
+      </Accordion>  
+
+      {/* UPCOMING LEAVE */}
+
+      {/* UPCOMING LEAVE */}
+
+    <Accordion defaultExpanded>
+      <AccordionSummary expandIcon={<ExpandMoreIcon />}
+        sx={{
+          background: "linear-gradient(90deg,#ff9966,#ff5e62)",
+          color: "white",
+          borderRadius: 2
+        }}
+      >
+        <Typography fontWeight="bold" fontSize={16}>
+          Upcoming Leave (Next 5 Days)
+        </Typography>
+      </AccordionSummary>
+
+      <AccordionDetails>
+
+        {upcomingOpen && (
+
+          <Paper sx={{ p: 3, mt: 2 }}>
+
+            <Table size="small">
+
+              <TableHead>
+                <TableRow sx={{ background: "#1b5e20" }}>
+                  <TableCell sx={{ color: "white" }}>Name</TableCell>
+                  <TableCell sx={{ color: "white" }}>Group</TableCell>
+                  <TableCell sx={{ color: "white" }}>Leave Period</TableCell>
+                  <TableCell sx={{ color: "white" }}>Type</TableCell>
+                  <TableCell sx={{ color: "white" }}>Status</TableCell>
+                  <TableCell sx={{ color: "white" }}>Replacement</TableCell>
+                </TableRow>
+              </TableHead>
+
+              <TableBody>
+
+                {upcomingLeaves.map((l) => (
+
+                  <TableRow key={l.id}>
+
+                    <TableCell>{l.name}</TableCell>
+
+                    <TableCell>{l.groupName}</TableCell>
+
+                    <TableCell>
+                      {dayjs(l.date).format("DD MMM YYYY")}
+                    </TableCell>
+
+                    <TableCell>{l.leaveType}</TableCell>
+
+                    <TableCell>
+                      <Chip
+                        label={l.finalStatus}
+                        size="small"
+                        color={l.finalStatus === "Approved" ? "success" : "warning"}
+                      />
+                    </TableCell>
+
+                    <TableCell>
+                      {l.replacement ? (
+                        <Chip
+                          label={l.replacement.name}
+                          size="small"
+                          color="success"
+                        />
+                      ) : l.replacementRequired ? (
+                        <Chip
+                          label="Required"
+                          size="small"
+                          color="error"
+                        />
+                      ) : (
+                        <Chip
+                          label="Not Required"
+                          size="small"
+                        />
+                      )}
+                    </TableCell>
+
+                  </TableRow>
+
+                ))}
+
+              </TableBody>
+
+            </Table>
+
+          </Paper>
+
+        )}
+
+      </AccordionDetails>
+    </Accordion>
+
+
+
+      <Dialog
+        open={forwardDialog}
+        onClose={() => setForwardDialog(false)}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            overflow: "hidden",
+            minWidth: 380
+          }
+        }}
+      >
+
+        {/* HEADER */}
+        <Box
+          sx={{
+            background: "linear-gradient(135deg, #5b6cff, #7b8dff)",
+            color: "#fff",
+            p: 2
+          }}
+        >
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Forward Leave
+          </Typography>
+          <Typography variant="caption">
+            Select dates requiring replacement
+          </Typography>
+        </Box>
+
+        {/* CONTENT */}
+        <DialogContent sx={{ mt: 1 }}>
+
+          {selectedLeaveObjects.map(l => (
+            <Box
+              key={l.id}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                p: 1.2,
+                borderRadius: 2,
+                background: "#f8f9fc",
+                border: "1px solid #e3e7ee",
+                mb: 1,
+                transition: "0.2s",
+
+                "&:hover": {
+                  background: "#eef2ff"
+                }
+              }}
+            >
+
+              {/* LEFT */}
+              <Box sx={{ display: "flex", alignItems: "center" }}>
+
+                <Checkbox
+                  size="small"
+                  checked={replacementMap[l.id] || false}
+                  onChange={(e) => {
+                    setReplacementMap({
+                      ...replacementMap,
+                      [l.id]: e.target.checked
+                    });
+                  }}
+                />
+
+                <Box>
+                  <Typography sx={{ fontSize: 13, fontWeight: 500 }}>
+                    {l.date}
+                  </Typography>
+
+                  <Typography sx={{ fontSize: 11, color: "#6b7280" }}>
+                    {l.name}
+                  </Typography>
+                </Box>
+
+              </Box>
+
+              {/* RIGHT BADGE */}
+              {replacementMap[l.id] && (
+                <Box
+                  sx={{
+                    fontSize: 10,
+                    px: 1,
+                    py: 0.3,
+                    borderRadius: 1,
+                    background: "#fdecea",
+                    color: "#d32f2f"
+                  }}
+                >
+                  Required
+                </Box>
+              )}
+
+            </Box>
+          ))}
 
         </DialogContent>
 
-        <DialogActions sx={{ pb:2, pr:3 }}>
+        {/* ACTIONS */}
+        <DialogActions sx={{ px: 2, pb: 2 }}>
 
           <Button
-            onClick={()=>setForwardDialogOpen(false)}
-            variant="outlined"
+            onClick={() => setForwardDialog(false)}
+            sx={{
+              textTransform: "none",
+              color: "#6b7280"
+            }}
           >
             Cancel
           </Button>
 
           <Button
             variant="contained"
-            sx={{ background:"#6a1b9a" }}
-            onClick={confirmForward}
+            sx={{
+              textTransform: "none",
+              borderRadius: 2,
+              px: 2.5,
+              background: "#5b6cff",
+              "&:hover": {
+                background: "#4a5ae0"
+              }
+            }}
+            onClick={async () => {
+
+              const payload = selectedLeaveObjects.map(l => ({
+                id: l.id,
+                replacementRequired: replacementMap[l.id] || false
+              }));
+
+              await api.put("/leave/sic-forward-bulk", {
+                leaves: payload
+              });
+
+              // alert("Forwarded");
+
+              setForwardDialog(false);
+              setSelectedLeaves([]);
+              fetchLeaveList();
+            }}
           >
-            Confirm Forward
+            Confirm
           </Button>
 
         </DialogActions>
 
+      </Dialog>
+
+      {/* ================= STATUS POPUP ================= */}
+      <Dialog
+        open={statusPopup.open}
+        onClose={() => setStatusPopup({ ...statusPopup, open: false })}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            p: 2,
+            textAlign: "center",
+            minWidth: 280
+          }
+        }}
+      >
+        <DialogContent>
+
+          <Typography
+            sx={{
+              fontWeight: 600,
+              fontSize: 16,
+              color:
+                statusPopup.type === "success"
+                  ? "#2e7d32"
+                  : "#d32f2f"
+            }}
+          >
+            {statusPopup.message}
+          </Typography>
+
+        </DialogContent>
       </Dialog>
 
     </Box>

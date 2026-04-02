@@ -468,7 +468,7 @@ export default function DutyRoster() {
             const numB = parseInt(b.groupName.replace("Group-", ""));
             return numA - numB;
           }).map(group => (
-            <Grid item xs={12} md={6} key={group.id}>
+            <Grid item xs={12} sm={6} md={3} key={group.id}>
               <Paper sx={{ p: 2, background: "#f1f8e9" }}>
                 <Typography variant="h6" sx={{ fontWeight: 600 }}>
                   {group.groupName}

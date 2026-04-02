@@ -204,7 +204,40 @@ export default function ReplacementManagement() {
   // ===============================
 
   const recommended = candidates.filter(c => c.source === "replacement");
-  const shiftStaff = candidates.filter(c => c.source === "shift");
+  const sameShift = candidates.filter(c => c.source === "shift");
+  const otherShift = candidates.filter(c => c.source === "otherShift");
+
+
+  const renderCard = (c, index) => (
+    <Paper
+      onClick={() => assignReplacement(c.employeeId)}
+      sx={{
+        p: 1.5,
+        borderRadius: 2,
+        cursor: "pointer",
+        border: "1px solid #d6dbe1",
+        background: "#f7f9fb",
+
+        "&:hover": {
+          background: "#eef3f7"
+        }
+      }}
+    >
+      <Typography fontWeight={600}>{c.name}</Typography>
+
+      <Typography variant="caption" color="text.secondary">
+        {c.designation}
+      </Typography>
+
+      <Typography variant="caption" display="block">
+        Duty: {c.assignedDuty || "-"}
+      </Typography>
+
+      <Typography variant="caption">
+        Score: {c.score}
+      </Typography>
+    </Paper>
+  );
 
   // ===============================
   // UI
@@ -509,126 +542,48 @@ export default function ReplacementManagement() {
 
         <DialogTitle sx={{background: "linear-gradient(90deg,#4a148c,#7b1fa2)", color: "#fff"}}>  Smart Replacement Selection</DialogTitle>
 
-        <Grid container spacing={2}>
+          {/* SECTION 1 — Recommended */}
 
-          {[...recommended, ...shiftStaff]
-            .sort((a, b) => a.score - b.score)
-            .map((c, index) => (
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            Recommended (Same Shift)
+          </Typography>
 
+          <Grid container spacing={2}>
+            {recommended.map((c, index) => (
               <Grid item xs={12} md={4} key={c.employeeId}>
-
-                <Paper
-                  onClick={() => assignReplacement(c.employeeId)}
-                  sx={{
-                    p: 2,
-                    borderRadius: 3,
-                    cursor: "pointer",
-                    position: "relative",
-                    color: "#fff",
-                    transition: "0.3s",
-
-                    background: c.isSIC
-                      ? "linear-gradient(135deg,#ff9966,#ff5e62)"
-                      : c.source === "shift"
-                        ? "linear-gradient(135deg,#607d8b,#90a4ae)"
-                        : "linear-gradient(135deg,#667eea,#764ba2)",
-
-                    "&:hover": {
-                      transform: "scale(1.05)",
-                      boxShadow: "0 10px 25px rgba(0,0,0,0.2)"
-                    }
-                  }}
-                >
-
-                  {/* BEST MATCH */}
-                  {index === 0 && (
-                    <Chip
-                      label="Best Match"
-                      size="small"
-                      sx={{
-                        position: "absolute",
-                        top: 10,
-                        left: 10,
-                        background: "#00e676",
-                        color: "#000",
-                        fontWeight: "bold"
-                      }}
-                    />
-                  )}
-
-                  {/* SCORE */}
-                  <Box sx={{
-                    position: "absolute",
-                    top: 10,
-                    right: 10,
-                    background: "#fff",
-                    color: "#000",
-                    px: 1,
-                    borderRadius: 2,
-                    fontSize: 12
-                  }}>
-                    Score: {c.score}
-                  </Box>
-
-                  {/* NAME */}
-                  <Typography fontWeight="bold" variant="subtitle1">
-                    {c.name}
-                  </Typography>
-
-                  <Typography variant="caption">
-                    {c.designation}
-                  </Typography>
-
-                  {/* SIC BADGE */}
-                  {c.isSIC && (
-                    <Chip
-                      label="⭐ SIC"
-                      size="small"
-                      sx={{ mt: 1, background: "#fff", color: "#000" }}
-                    />
-                  )}
-
-                  {/* METRICS */}
-                  <Box sx={{ mt: 1 }}>
-
-                    <Typography variant="body2">
-                      🔁 Replacement: {c.replacementCount90Days}
-                    </Typography>
-
-                    <Typography variant="body2">
-                      ❌ Denial: {c.denialCount90Days}
-                    </Typography>
-
-                    <Typography variant="body2">
-                      ⚡ No Duty: {c.noDuty90Days ? "Yes" : "No"}
-                    </Typography>
-
-                  </Box>
-
-                  {/* ACTION BUTTON */}
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    sx={{
-                      mt: 2,
-                      background: "#fff",
-                      color: "#000",
-                      fontWeight: "bold"
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      assignReplacement(c.employeeId);
-                    }}
-                  >
-                    Assign
-                  </Button>
-
-                </Paper>
-
+                {renderCard(c, index)}
               </Grid>
-
             ))}
-        </Grid>
+          </Grid>
+
+          {/* SECTION 2 — Same Shift Staff */}
+
+          <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>
+            Same Shift Staff
+          </Typography>
+
+          <Grid container spacing={2}>
+            {sameShift.map((c, index) => (
+              <Grid item xs={12} md={4} key={c.employeeId}>
+                {renderCard(c, index)}
+              </Grid>
+            ))}
+          </Grid>
+
+          {/* SECTION 1 — Other Shift */}
+
+          <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>
+            Other Shift (Will Create Vacancy)
+          </Typography>
+
+          <Grid container spacing={2}>
+            {otherShift.map((c, index) => (
+              <Grid item xs={12} md={4} key={c.employeeId}>
+                {renderCard(c, index)}
+              </Grid>
+            ))}
+          </Grid>
+
 
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Close</Button>

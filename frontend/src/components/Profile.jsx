@@ -15,6 +15,7 @@ import {
   DialogTitle,
   DialogContent
 } from "@mui/material";
+import ShiftTimeline from "./ShiftTimeline";
 
 export default function Profile(){
 
@@ -34,6 +35,9 @@ const [fy,setFy] = useState("2025-26")
 const [coffStats, setCoffStats] = useState({ summary: {}, details: [] })
 const [openCoff, setOpenCoff] = useState(false)
 const [loginHistory, setLoginHistory] = useState([])
+const [timelineData, setTimelineData] = useState([]);
+const [openLogin, setOpenLogin] = useState(false);
+
 
 useEffect(()=>{
 
@@ -43,6 +47,7 @@ fetchLeaveStats()
 fetchTrainingStats()
 fetchCoffStats()
 fetchLoginHistory()
+fetchTimeline()
 },[])
 
 const fetchProfile = async ()=>{
@@ -76,6 +81,23 @@ const fetchLoginHistory = async () => {
   const res = await api.get(`/auth/login-history/${employeeId}`)
   setLoginHistory(res.data)
 }
+
+const fetchTimeline = async () => {
+
+  const res = await api.get(`/roster/shift-history/${employeeId}`);
+
+  const formatted = res.data.map(r => ({
+    group: r.groupName,
+    start: new Date(r.startDate).getTime(),
+    end: r.endDate
+      ? new Date(r.endDate).getTime()
+      : new Date().getTime(),
+    startDate: r.startDate,
+    endDate: r.endDate || "Present"
+  }));
+
+  setTimelineData(formatted);
+};
 
 const fetchTrainingStats = async ()=>{
 
@@ -413,7 +435,7 @@ Load
 
 {/* C-OFF CARD */}
 
-<Grid item xs={12} md={4}>
+<Grid item xs={12} md={3}>
 
   <Paper
     sx={{
@@ -453,7 +475,7 @@ Load
 
 {/* Login History CARD */}
 
-<Grid item xs={12} md={6}>
+<Grid item xs={12} md={3}>
 
   <Paper sx={{ p:3, borderRadius:4, background:"#ede7f6" }}>
 
@@ -466,7 +488,7 @@ Load
     {loginHistory.length === 0 ? (
       <Typography>No login records</Typography>
     ) : (
-      loginHistory.map((l,i)=>(
+      loginHistory.slice(0,3).map((l,i)=>(
         <Box key={i} sx={{mb:1, p:1, borderBottom:"1px solid #ddd"}}>
 
           <Typography fontSize={14}>
@@ -487,11 +509,48 @@ Load
       ))
     )}
 
+    <Button
+      size="small"
+      sx={{ mt: 1 }}
+      onClick={() => setOpenLogin(true)}
+    >
+      View All
+    </Button>
+
+  </Paper>
+
+</Grid>
+
+<Grid item xs={12} md={6}>
+
+  <Paper
+    sx={{
+      p:3,
+      borderRadius:4,
+      background:"#f3e5f5"
+    }}
+  >
+
+    <Typography variant="h6">
+      Shift Timeline
+    </Typography>
+
+    <Divider sx={{ my:2 }}/>
+
+    <Box sx={{ width: "100%" }}>
+      <ShiftTimeline
+        data={timelineData}
+        height={200}
+        chartId="profileTimeline"
+      />
+    </Box>
+
   </Paper>
 
 </Grid>
 
 </Grid>
+
 
 <Dialog open={openCoff} onClose={() => setOpenCoff(false)} fullWidth maxWidth="sm">
 
@@ -538,6 +597,39 @@ Load
 
   </DialogContent>
 
+</Dialog>
+
+<Dialog
+  open={openLogin}
+  onClose={() => setOpenLogin(false)}
+  fullWidth
+  maxWidth="sm"
+>
+  <DialogTitle>Full Login History</DialogTitle>
+
+  <DialogContent>
+
+    {loginHistory.map((l,i)=>(
+      <Box key={i} sx={{mb:1, p:1, borderBottom:"1px solid #ddd"}}>
+
+        <Typography fontSize={14}>
+          {new Date(l.loginTime).toLocaleString()}
+        </Typography>
+
+        <Typography fontSize={12}>
+          Status: {l.status}
+        </Typography>
+
+        {l.logoutTime && (
+          <Typography fontSize={12}>
+            Logout: {new Date(l.logoutTime).toLocaleString()}
+          </Typography>
+        )}
+
+      </Box>
+    ))}
+
+  </DialogContent>
 </Dialog>
 
 </Box>

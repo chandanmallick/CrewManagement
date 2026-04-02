@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
 import api from "../api/api";
 import dayjs from "dayjs";
 import DatePicker from "react-multi-date-picker";
+import TablePagination from "@mui/material/TablePagination";
 import {
   Box,
   Typography,
@@ -20,13 +20,11 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  IconButton,
-  Collapse,
   Chip,
   MenuItem
 } from "@mui/material";
 
-import { ExpandLess, ExpandMore } from "@mui/icons-material";
+// import { ExpandLess, ExpandMore } from "@mui/icons-material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
 export default function RosterGroupManagement() {
@@ -44,6 +42,9 @@ export default function RosterGroupManagement() {
 
   const [entryOpen, setEntryOpen] = useState(true);
   const [dataOpen, setDataOpen] = useState(true);
+
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(5);
 
   /* ---------------- FETCH ---------------- */
 
@@ -78,9 +79,15 @@ export default function RosterGroupManagement() {
 
   const fetchRegisteredGroups = async () => {
     const res = await api.get(`/roster/group`);
-    const sorted = res.data.sort(
-      (a, b) => new Date(b.startDate) - new Date(a.startDate)
-    );
+    const sorted = res.data.sort((a, b) => {
+      // 🔥 Active first
+      if (a.isActive !== b.isActive) {
+        return a.isActive ? -1 : 1;
+      }
+
+      // 🔥 Then latest startDate
+      return new Date(b.startDate) - new Date(a.startDate);
+    });
     setRegisteredGroups(sorted);
   };
 
@@ -98,12 +105,12 @@ export default function RosterGroupManagement() {
     startDate,
     endDate: endDate || null,
     members: members.map(m => ({
-      employeeId: m.userId,
+      employeeId: m.userId || m.employeeId,
       name: m.name,
       designation: m.designation
     })),
     shiftInCharge: {
-      employeeId: sic.userId,
+      employeeId: sic.userId || sic.employeeId,
       name: sic.name,
       designation: sic.designation
     }
@@ -135,6 +142,11 @@ export default function RosterGroupManagement() {
     await api.put(`/roster/group/toggle-status/${id}`);
     fetchRegisteredGroups();
   };
+
+  const paginatedGroups = registeredGroups.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage
+  );
 
   return (
     <Box sx={{ width: "100%", px: 4 }}>
@@ -242,7 +254,7 @@ export default function RosterGroupManagement() {
 
       </Grid>
 
-      <Grid item xs={12} md={8}>
+      <Grid item xs={12} md={4}>
 
       <Autocomplete
       fullWidth
@@ -322,7 +334,7 @@ export default function RosterGroupManagement() {
 
       <TableBody>
 
-      {registeredGroups.map((group)=>(
+      {paginatedGroups.map((group) => (
 
       <TableRow
       key={group.id}
@@ -403,6 +415,19 @@ export default function RosterGroupManagement() {
       </TableBody>
 
       </Table>
+
+      <TablePagination
+        component="div"
+        count={registeredGroups.length}
+        page={page}
+        onPageChange={(e, newPage) => setPage(newPage)}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={(e) => {
+          setRowsPerPage(parseInt(e.target.value, 10));
+          setPage(0);
+        }}
+        rowsPerPageOptions={[5, 10]}
+      />
 
       </TableContainer>
 

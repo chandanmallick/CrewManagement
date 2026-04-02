@@ -16,6 +16,8 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfbase import pdfmetrics
 import os
 import logging
+from fastapi import UploadFile, File
+import pandas as pd
 
 from database.database_mongo import (
     cycle_config_collection,
@@ -24,7 +26,8 @@ from database.database_mongo import (
     roster_master_collection,
     compensatory_off_collection,
     roster_master_collection,
-    employee_collection
+    employee_collection,
+    employee_shift_history
 )
 
 from database.database_mongo import roster_master_collection, employee_daily_collection, holiday_master_collection
@@ -495,6 +498,45 @@ def download_roster_pdf(data: dict):
     #     {}
     # )
 
+    # ==========================================
+    # 🔥 BUILD GROUP-WISE MATRIX (REQUIRED FOR TEMPLATE)
+    # ==========================================
+
+    from collections import defaultdict
+
+    group_map = defaultdict(dict)
+
+    # ==========================================
+    # 🔥 CORRECT GROUP-WISE MATRIX BUILD
+    # ==========================================
+
+    group_map = {}
+
+    for rec in roster.get("data", []):
+
+        group_name = rec.get("groupName")
+        group_dates = rec.get("data", {})   # ✅ THIS IS KEY
+
+        if not group_name:
+            continue
+
+        group_map[group_name] = group_dates
+
+
+    # Convert to template format
+    roster_data = [
+        {
+            "groupName": g,
+            "data": group_map[g]
+        }
+        for g in group_map
+    ]
+
+    roster_data = sorted(
+        roster_data,
+        key=lambda x: int(x["groupName"].split("-")[-1])
+    )
+
     html_content = template.render(
         roster_data=roster_data,
         group_details=group_details,
@@ -511,6 +553,7 @@ def download_roster_pdf(data: dict):
         sign_employee_id=sign_employee_id
         # sign_designation = data.get("signedDesignation", "")
     )
+    print(html_content, roster_data)
 
     temp_html = os.path.join(BASE_DIR, "temp_roster.html")
     with open(temp_html, "w", encoding="utf-8") as f:
@@ -565,6 +608,170 @@ def debug_latest_groupdetails():
 # =========================================================
 
 
+from datetime import datetime, timedelta
+
+def update_shift_history(roster):
+
+    from database.database_mongo import employee_shift_history
+
+    start_date = roster.get("startDate")
+    end_date = roster.get("endDate")
+
+    if not start_date:
+        return
+
+    # ==========================================
+    # BUILD EMPLOYEE → GROUP MAP FROM ROSTER
+    # ==========================================
+    roster_data = roster.get("data", [])
+    group_details = roster.get("groupDetails", [])
+
+    emp_group_map = {}
+
+    for group in roster_data:
+
+        group_name = group.get("groupName")
+
+        group_info = next(
+            (g for g in group_details if g["groupName"] == group_name),
+            {}
+        )
+
+        members = group_info.get("members", [])
+        sic = group_info.get("shiftInCharge")
+
+        all_members = members.copy()
+        if sic:
+            all_members.append(sic)
+
+        for m in all_members:
+
+            emp_id = (m.get("employeeId") or "").strip()
+
+            if not emp_id:
+                continue
+
+            emp_group_map[emp_id] = {
+                "groupName": group_name,
+                "name": m.get("name"),
+                "designation": m.get("designation")
+            }
+
+    # ==========================================
+    # GET ALL ACTIVE RECORDS
+    # ==========================================
+    active_records = list(employee_shift_history.find({
+        "isActive": True
+    }))
+
+    active_map = {
+        r["employeeId"]: r for r in active_records
+    }
+
+    new_start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+
+    # ==========================================
+    # STEP 1: HANDLE EXISTING EMPLOYEES
+    # ==========================================
+    for emp_id, existing in active_map.items():
+
+        existing_group = existing.get("groupName")
+        existing_start = existing.get("startDate")
+
+        # 🔥 SAFETY CHECK
+        if not existing_start:
+            # Option 1: skip bad record
+            continue
+
+        try:
+            existing_start_dt = datetime.strptime(existing_start, "%Y-%m-%d")
+        except Exception:
+            # Option 2: skip invalid format
+            continue
+
+        new_data = emp_group_map.get(emp_id)
+
+        # ------------------------------------------
+        # CASE A: EMPLOYEE REMOVED FROM SHIFT
+        # ------------------------------------------
+        if not new_data:
+
+            # close if overlapping
+            if existing_start_dt < new_start_dt:
+
+                employee_shift_history.update_one(
+                    {"_id": existing["_id"]},
+                    {
+                        "$set": {
+                            "endDate": (new_start_dt - timedelta(days=1)).strftime("%Y-%m-%d"),
+                            "isActive": False,
+                            "updatedOn": datetime.utcnow()
+                        }
+                    }
+                )
+
+            else:
+                # future record → delete
+                employee_shift_history.delete_one({"_id": existing["_id"]})
+
+            continue
+
+        # ------------------------------------------
+        # CASE B: SAME GROUP → CONTINUE
+        # ------------------------------------------
+        if existing_group == new_data["groupName"]:
+            continue
+
+        # ------------------------------------------
+        # CASE C: GROUP CHANGED
+        # ------------------------------------------
+        if existing_start_dt < new_start_dt:
+
+            # close old properly
+            employee_shift_history.update_one(
+                {"_id": existing["_id"]},
+                {
+                    "$set": {
+                        "endDate": (new_start_dt - timedelta(days=1)).strftime("%Y-%m-%d"),
+                        "isActive": False,
+                        "updatedOn": datetime.utcnow()
+                    }
+                }
+            )
+
+        else:
+            # invalid future → delete
+            employee_shift_history.delete_one({"_id": existing["_id"]})
+
+    # ==========================================
+    # STEP 2: CREATE NEW RECORDS
+    # ==========================================
+    for emp_id, data in emp_group_map.items():
+
+        existing = employee_shift_history.find_one({
+            "employeeId": emp_id,
+            "isActive": True
+        })
+
+        # already handled SAME GROUP
+        if existing:
+            continue
+
+        employee_shift_history.insert_one({
+            "employeeId": emp_id,
+            "name": data.get("name"),
+            "designation": data.get("designation"),
+
+            "groupName": data.get("groupName"),
+
+            "startDate": start_date,
+            "endDate": None,
+
+            "isActive": True,
+
+            "createdOn": datetime.utcnow()
+        })
+
 @router.post("/push-to-calendar/{roster_id}")
 def push_roster_to_calendar(roster_id: str):
 
@@ -592,6 +799,10 @@ def push_roster_to_calendar(roster_id: str):
 
     roster_data_raw = roster.get("data", [])
     group_details = roster.get("groupDetails", [])
+    DiC = roster.get("leaveAuthority", [])
+    print("Start of data")
+    print(roster)
+    print("end of data")
 
     roster_data = []
 
@@ -618,13 +829,21 @@ def push_roster_to_calendar(roster_id: str):
 
             for m in all_members:
 
+                emp_id = (m.get("employeeId") or "").strip()
+
+                is_sic_flag = False
+
+                if sic and emp_id == (sic.get("employeeId") or "").strip():
+                    is_sic_flag = True
+
                 roster_data.append({
-                    "employeeId": (m.get("employeeId") or "").strip(),
+                    "employeeId": emp_id,
                     "name": m.get("name"),
                     "designation": m.get("designation"),
                     "groupName": group_name,
                     "date": date_str,
-                    "shift": shift
+                    "shift": shift,
+                    "isSIC": is_sic_flag   # 🔥 FIX
                 })
 
     # ==========================================
@@ -637,6 +856,7 @@ def push_roster_to_calendar(roster_id: str):
         })
 
     bulk_operations = []
+    # print(roster_data)
 
     for rec in roster_data:
 
@@ -651,12 +871,23 @@ def push_roster_to_calendar(roster_id: str):
         is_sic = rec.get("isSIC", False)
 
         sic_details = rec.get("sic")
-        department_ic = rec.get("departmentIC")
+        department_ic = DiC
 
         # ==========================================
         # SHIFT CONVERSION (CUSTOMIZE IF NEEDED)
         # ==========================================
-        converted_shift = shift
+        def map_shift(shift):
+            if shift in ["M1", "M2"]:
+                return "Morning"
+            elif shift in ["E1", "E2"]:
+                return "Evening"
+            elif shift in ["N1", "N2"]:
+                return "Night"
+            elif shift in ["O1", "O2", "OFF"]:
+                return "OFF"
+            return shift  # fallback
+
+        converted_shift = map_shift(shift)
 
         # ==========================================
         # CHECK EXISTING RECORD
@@ -681,6 +912,9 @@ def push_roster_to_calendar(roster_id: str):
         # ==========================================
         # BUILD SAFE UPDATE
         # ==========================================
+
+
+
         set_fields = {
             "name": name,
             "designation": designation,
@@ -778,6 +1012,11 @@ def push_roster_to_calendar(roster_id: str):
     # ==========================================
     if bulk_operations:
         employee_daily_collection.bulk_write(bulk_operations)
+
+    # 🔥 UPDATE SHIFT HISTORY (NEW ENGINE)
+
+    if is_final:
+        update_shift_history(roster)
 
     # ==========================================
     # MARK CALENDAR PUSHED
@@ -1147,3 +1386,200 @@ def delete_roster(roster_id: str):
     roster_master_collection.delete_one({"_id": ObjectId(roster_id)})
 
     return {"message": "Draft roster deleted"}
+
+
+############### Shift person history #####################
+
+from typing import List
+from fastapi import Body
+
+@router.post("/shift-history/upload")
+def upload_shift_history(data: List[dict] = Body(...)):
+
+    from database.database_mongo import employee_shift_history
+    from datetime import datetime
+
+    bulk = []
+
+    for row in data:
+
+        emp_id = (row.get("employeeId") or "").strip()
+        if not emp_id or not row.get("startDate"):
+            continue
+
+        bulk.append({
+            "employeeId": emp_id,
+            "name": row.get("name"),
+            "designation": row.get("designation"),
+            "groupName": row.get("groupName"),
+
+            "startDate": row.get("startDate"),
+            "endDate": row.get("endDate"),
+
+            "isActive": True if not row.get("endDate") else False,
+
+            "createdOn": datetime.utcnow()
+        })
+
+    if bulk:
+        employee_shift_history.insert_many(bulk)
+
+    return {"message": "Uploaded", "count": len(bulk)}
+
+
+@router.post("/shift-history/upload-excel")
+def upload_shift_history_excel(file: UploadFile = File(...)):
+
+    import pandas as pd
+    from datetime import datetime
+
+    import math
+
+    def clean_value(val):
+        if val is None:
+            return None
+        if isinstance(val, float) and math.isnan(val):
+            return None
+        return val
+
+    contents = file.file.read()
+
+    df = pd.read_excel(contents)
+
+    records = []
+
+    last_emp = None
+    last_name = None
+
+    for _, row in df.iterrows():
+
+        emp_id = str(row.get("emp_id") or "")
+        name = row.get("name")
+
+        # Handle merged rows
+        if emp_id:
+            last_emp = emp_id
+            last_name = name
+
+        emp_id = last_emp
+        name = name or last_name
+
+        if not emp_id:
+            continue
+
+        # 🔥 DATE CONVERSION
+        def format_date(val):
+            if pd.isna(val):
+                return None
+            if isinstance(val, datetime):
+                return val.strftime("%Y-%m-%d")
+
+            try:
+                return datetime.strptime(str(val), "%d-%m-%Y").strftime("%Y-%m-%d")
+            except:
+                return str(val)
+
+        start_date = format_date(row.get("startDate"))
+        end_date = format_date(row.get("endDate"))
+
+        group_name = str(row.get("groupName")).replace(" ", "-")
+
+        records.append({
+            "employeeId": str(clean_value(emp_id)),
+            "name": clean_value(name),
+            "groupName": clean_value(group_name),
+            "startDate": clean_value(start_date),
+            "endDate": clean_value(end_date),
+            "isActive": False if end_date else True,
+            "createdOn": datetime.utcnow()
+        })
+
+    if records:
+        employee_shift_history.insert_many(records)
+
+    return {
+        "message": "Excel uploaded successfully",
+        "count": len(records)
+    }
+
+
+
+@router.get("/shift-history/current")
+def get_current_shift():
+
+
+    return list(employee_shift_history.find({
+        "isActive": True
+    }))
+
+@router.get("/shift-history/all")
+def get_all_shift_history():
+
+    data = list(employee_shift_history.find())
+
+    cleaned = []
+
+    import math
+
+    for d in data:
+        d["_id"] = str(d["_id"])
+
+        for k, v in d.items():
+            if isinstance(v, float) and math.isnan(v):
+                d[k] = None
+
+        cleaned.append(d)
+
+    return cleaned
+
+
+@router.get("/shift-history/{employee_id}")
+def get_employee_shift_history(employee_id: str):
+
+    from database.database_mongo import employee_shift_history
+
+    records = list(employee_shift_history.find({
+        "employeeId": employee_id
+    }).sort("startDate", 1))
+
+    for r in records:
+        r["_id"] = str(r["_id"])
+
+    return records
+
+
+@router.delete("/shift-history/{record_id}")
+def delete_shift_record(record_id: str):
+
+    from bson import ObjectId
+
+    result = employee_shift_history.delete_one({
+        "_id": ObjectId(record_id)
+    })
+
+    if result.deleted_count == 0:
+        raise HTTPException(404, "Record not found")
+
+    return {"message": "Deleted successfully"}
+
+@router.put("/shift-history/{record_id}")
+def update_shift_record(record_id: str, data: dict):
+
+    from bson import ObjectId
+
+    update_fields = {
+        "employeeId": data.get("employeeId"),
+        "name": data.get("name"),
+        "groupName": data.get("groupName"),
+        "startDate": data.get("startDate"),
+        "endDate": data.get("endDate"),
+        "isActive": data.get("isActive"),
+        "updatedOn": datetime.utcnow()
+    }
+
+    employee_shift_history.update_one(
+        {"_id": ObjectId(record_id)},
+        {"$set": update_fields}
+    )
+
+    return {"message": "Updated successfully"}

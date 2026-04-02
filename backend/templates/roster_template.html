@@ -141,11 +141,13 @@ body {
 </tr>
 </table>
 
-<b>Period:</b> {{ start_date }} to {{ end_date }}
+<div style="font-weight:bold; font-size:16px; margin-bottom:10px;">
+  Period: {{ start_date }} to {{ end_date }}
+</div>
 
 <!-- ================= ROSTER TABLE ================= -->
 
-<table class="roster-table">
+<table class="roster-table" border="1" cellspacing="0" cellpadding="4">
 <tr>
     <th>Group</th>
     {% for d in dates %}
@@ -155,12 +157,14 @@ body {
 
 {% for group in roster_data %}
 <tr>
-    <td><b>{{ group.get('groupName','') }}</b></td>
+    <td><b>{{ group.groupName }}</b></td>
+
     {% for d in dates %}
-    <td>{{ group.get('data',{}).get(d,'') }}</td>
+    <td>{{ group.data.get(d, '') }}</td>
     {% endfor %}
 </tr>
 {% endfor %}
+
 </table>
 
 <!-- ================= GROUP DETAILS ================= -->
