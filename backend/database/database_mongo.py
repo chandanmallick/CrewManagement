@@ -33,3 +33,5 @@ login_history_collection = db["login_history_collection"]
 duty_denial_collection = db["duty_denial_collection"]
 duty_notification_collection = db["duty_notification_collection"]
 employee_shift_history = db["employee_shift_history"]
+
+duty_notification_collection =db["duty_notification_collection"]

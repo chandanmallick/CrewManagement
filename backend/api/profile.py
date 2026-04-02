@@ -195,7 +195,17 @@ async def update_profile(
         {"$set": update_data}
     )
 
-    return {"message": "Profile updated"}
+    employee = employee_collection.find_one({"userId": employeeId})
+    print("PHOTO RECEIVED:", photo)
+
+    return {
+        "employeeId": employee.get("employeeId"),
+        "name": employee.get("name"),
+        "designation": employee.get("designation"),
+        "phone": employee.get("phone"),
+        "nameHindi": employee.get("nameHindi"),
+        "profilePhoto": employee.get("profilePhoto")
+    }
 
 
 

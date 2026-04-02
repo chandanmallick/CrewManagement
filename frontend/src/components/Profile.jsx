@@ -128,20 +128,25 @@ formData.append("employeeId",employeeId)
 formData.append("nameHindi",profile.nameHindi || "")
 formData.append("phone",profile.phone || "")
 
-if(photo){
-formData.append("photo",photo)
+if (photo instanceof File) {
+  formData.append("photo", photo);
+} else {
+  console.log("No photo selected or invalid");
 }
 
-await api.post("/profile/update",formData)
+const res = await api.post("/profile/profile/update", formData, {
+  headers: {
+    "Content-Type": "multipart/form-data"
+  }
+});
 
-alert("Profile updated")
-
-fetchProfile()
+setProfile(res.data);
 
 }catch(err){
 
 console.error(err)
 alert("Update failed")
+console.log("PHOTO STATE:", photo);
 
 }
 
@@ -206,7 +211,23 @@ Upload Photo
 hidden
 type="file"
 accept="image/*"
-onChange={(e)=>setPhoto(e.target.files[0])}
+onChange={async (e) => {
+
+  const file = e.target.files[0];
+  setPhoto(file);
+
+  const formData = new FormData();
+  formData.append("employeeId", employeeId);
+  formData.append("photo", file);
+
+  await api.post("/profile/update", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data"
+    }
+  });
+
+  fetchProfile();
+}}
 />
 </Button>
 

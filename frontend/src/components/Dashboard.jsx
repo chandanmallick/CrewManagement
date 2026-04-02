@@ -12,6 +12,7 @@ import * as am5 from "@amcharts/amcharts5";
 import * as am5percent from "@amcharts/amcharts5/percent";
 import am5themes_Animated from "@amcharts/amcharts5/themes/Animated";
 import * as am5xy from "@amcharts/amcharts5/xy";
+import { useNavigate } from "react-router-dom";
 
 import {
   Box,
@@ -33,6 +34,7 @@ import {
 export default function Dashboard() {
 
   // ================= STATE =================
+  const navigate = useNavigate();
 
   const [employee, setEmployee] = useState("")
   const [kpiYear, setKpiYear] = useState(new Date().getFullYear())
@@ -52,6 +54,8 @@ export default function Dashboard() {
   const [selectedNotif, setSelectedNotif] = useState(null);
   const [denyReason, setDenyReason] = useState("");
   const [topReplacement, setTopReplacement] = useState([]);
+  const [generalNotifications, setGeneralNotifications] = useState([]);
+  
 
   const [duty,setDuty] = useState({
     today: { Morning: [], Evening: [], Night: [] },
@@ -128,8 +132,31 @@ export default function Dashboard() {
     }
   };
 
+  const fetchGeneralNotifications = async () => {
+    try {
+      const res = await api.get("/notifications");
+      setGeneralNotifications(res.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
+    fetchGeneralNotifications();
+  }, []);
+
+  useEffect(() => {
+
     fetchNotifications();
+    fetchGeneralNotifications();   // 🔥 ADD THIS
+
+    const interval = setInterval(() => {
+      fetchNotifications();
+      fetchGeneralNotifications();
+    }, 30000); // every 30 sec
+
+    return () => clearInterval(interval);
+
   }, []);
 
   // ================= HELPERS =================
@@ -688,6 +715,46 @@ export default function Dashboard() {
                   )}
 
                 </Box>
+
+              </Box>
+
+            ))}
+
+          </Paper>
+
+          <Paper sx={{ p:2, borderRadius:3, mt:2 }}>
+            <Typography fontWeight="bold" mb={1}>
+              System Notifications
+            </Typography>
+
+            {generalNotifications.map(n => (
+
+              <Box
+                key={n._id}
+                sx={{
+                  p:1.2,
+                  mb:1,
+                  borderRadius:2,
+                  background:
+                    n.status === "Unread"
+                      ? "#e8f5e9"
+                      : "#f5f5f5",
+                  cursor:"pointer"
+                }}
+                onClick={async () => {
+
+                  await api.put(`/notifications/read/${n._id}`);
+
+                  if (n.action === "VIEW_LEAVE") {
+                    navigate(`/leave/${n.refId}`);
+                  }
+
+                  fetchGeneralNotifications();
+                }}
+              >
+
+                <Typography fontWeight="bold">{n.title}</Typography>
+                <Typography variant="caption">{n.message}</Typography>
 
               </Box>
 

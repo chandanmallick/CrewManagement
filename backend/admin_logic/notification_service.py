@@ -54,7 +54,7 @@ def send_teams(message):
 # IN-APP NOTIFICATION
 # ============================================
 
-def send_app_notification(employee_ids, title, message):
+def send_app_notification(employee_ids, title, message, ref_id=None, action=None, type="GENERAL"):
 
     now = datetime.utcnow()
 
@@ -65,6 +65,12 @@ def send_app_notification(employee_ids, title, message):
             "employeeId": emp_id,
             "title": title,
             "message": message,
+
+            # 🔥 NEW FIELDS
+            "refId": ref_id,
+            "action": action,
+            "type": type,
+
             "status": "Unread",
             "createdAt": now
         })
@@ -77,13 +83,30 @@ def send_app_notification(employee_ids, title, message):
 # MASTER FUNCTION
 # ============================================
 
-def notify_all(email_list=None, employee_ids=None, subject=None, message=None):
+def notify_all(
+    email_list=None,
+    employee_ids=None,
+    subject=None,
+    message=None,
+    ref_id=None,
+    action=None,
+    type="GENERAL"
+):
 
+    # 📧 EMAIL
     if email_list:
         send_email(email_list, subject, message)
 
+    # 📱 IN-APP
     if employee_ids:
-        send_app_notification(employee_ids, subject, message)
+        send_app_notification(
+            employee_ids,
+            subject,
+            message,
+            ref_id=ref_id,
+            action=action,
+            type=type
+        )
 
-    # Teams (always send summary)
+    # 💬 TEAMS (single summary)
     send_teams(f"{subject}\n\n{message}")

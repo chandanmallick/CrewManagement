@@ -240,6 +240,7 @@ def apply_leave(data: dict, user=Depends(get_current_user)):
     dates = []
 
 
+
     # 🔥 NEW SUPPORT (PUT THIS FIRST)
     if data.get("dates"):
         dates = data.get("dates")
@@ -423,14 +424,18 @@ def apply_leave(data: dict, user=Depends(get_current_user)):
         employee_ids=[sic_record["employeeId"]] if sic_record else [],
         subject="Leave Application (Multiple Days)",
         message=f"""
-    {emp.get("name")} applied leave
+        {emp.get("name")} applied leave
 
-    From: {dates[0]}
-    To: {dates[-1]}
-    Total Days: {len(dates)}
+        From: {dates[0]}
+        To: {dates[-1]}
+        Total Days: {len(dates)}
 
-    Group: {group_name}
-    """
+        Group: {group_name}
+        """,
+
+        ref_id=leave_group_id,
+        action="VIEW_LEAVE",
+        type="LEAVE"
     )
     return {
         "message": "Leave applied successfully",
@@ -634,7 +639,10 @@ def approve_leave_bulk(data: dict, user=Depends(get_current_user)):
         email_list=[],
         employee_ids=[],
         subject="Leave Approved (Partial)",
-        message=f"{updated_count} leave(s) approved"
+        message=f"{updated_count} leave(s) approved",
+        ref_id=str(lid),
+        action="VIEW_LEAVE",
+        type="LEAVE"
     )
 
     return {"message": f"{updated_count} leave(s) approved"}
