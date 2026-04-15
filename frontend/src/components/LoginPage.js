@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "../api/api";
 import {
   Box,
   Grid,
@@ -33,7 +33,7 @@ const LoginPage = ({ onLogin }) => {
 
     try {
 
-      const res = await axios.post("http://localhost:8000/auth/login", {
+      const res = await api.post("auth/login", {
         userId,
         password
       });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api/api";
 import {
   Box,
   Typography,
@@ -16,8 +16,6 @@ import {
   TableRow
 } from "@mui/material";
 
-const API_URL = "http://localhost:8000/admin";
-
 export default function DropdownMaster() {
 
   const [type, setType] = useState("");
@@ -32,9 +30,7 @@ export default function DropdownMaster() {
     }
 
     try {
-      const res = await axios.get(
-        `${API_URL}/dropdown/${selectedType}`
-      );
+      const res = await api.get(`/admin/dropdown/${selectedType}`);
       setDropdownList(res.data);
     } catch (error) {
       console.error("Fetch error:", error);
@@ -50,7 +46,7 @@ export default function DropdownMaster() {
     if (!type || !value) return;
 
     try {
-      await axios.post(`${API_URL}/dropdown`, {
+      await api.post(`$/admin/dropdown`, {
         type,
         value
       });

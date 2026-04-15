@@ -27,9 +27,6 @@ import DownloadIcon from "@mui/icons-material/Download";
 import { ExpandMore, ExpandLess } from "@mui/icons-material";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 
-const Roster_API_URL = "http://localhost:8000/roster";
-const Admin_API_URL = "http://localhost:8000/admin";
-
 export default function DutyRoster() {
 
   const [startDate, setStartDate] = useState("");

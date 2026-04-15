@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api/api";
 import {
   Box,
   Typography,
@@ -22,8 +22,6 @@ import EditIcon from "@mui/icons-material/Edit";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 
-const Admin_API_URL = "http://localhost:8000/admin";
-
 export default function DutyLeaveMaster() {
   const [masterType, setMasterType] = useState("");
   const [value, setValue] = useState("");
@@ -40,9 +38,7 @@ export default function DutyLeaveMaster() {
     }
 
     try {
-      const res = await axios.get(
-        `${Admin_API_URL}/DutyLeaveType/${type}`
-      );
+      const res = await api.get(`admin/DutyLeaveType/${type}`);
       setList(res.data || []);
     } catch (err) {
       console.error(err);
@@ -57,7 +53,7 @@ export default function DutyLeaveMaster() {
     if (!masterType || !value.trim()) return;
 
     try {
-      await axios.post(`${Admin_API_URL}/DutyLeaveType`, {
+      await api.post(`admin/DutyLeaveType`, {
         dutyLeaveType_cat: masterType,
         value,
         status
@@ -77,7 +73,7 @@ export default function DutyLeaveMaster() {
     if (!window.confirm("Delete this item?")) return;
 
     try {
-      await axios.delete(`${Admin_API_URL}/DutyLeaveType/${id}`);
+      await api.delete(`admin/DutyLeaveType/${id}`);
       fetchData(masterType);
     } catch (err) {
       console.error(err);

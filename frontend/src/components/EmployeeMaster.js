@@ -19,7 +19,6 @@ import {
   FormControlLabel
 } from "@mui/material";
 
-const API_URL = "http://localhost:8000/admin";
 
 export default function EmployeeMaster() {
 

@@ -4,6 +4,10 @@ const api = axios.create({
   baseURL: "http://10.3.230.60:8000", // adjust
 });
 
+// const api = axios.create({
+//   baseURL: "http://localhost:8000", // adjust
+// });
+
 // ✅ REQUEST INTERCEPTOR (attach token)
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");

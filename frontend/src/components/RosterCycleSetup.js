@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api/api";
 import {
   Box,
   Typography,
@@ -9,8 +9,6 @@ import {
   MenuItem,
   Button
 } from "@mui/material";
-
-const Roster_API_URL = "http://localhost:8000/roster";
 
 const DUTY_SEQUENCE = [
   "E1","E2","M1","M2","N1","N2","O1","O2"
@@ -31,7 +29,7 @@ export default function RosterCycleSetup() {
   }, []);
 
   const fetchConfig = async () => {
-    const res = await axios.get(`${Roster_API_URL}/cycle-setup`);
+    const res = await api.get(`roster/cycle-setup`);
 
     if (res.data.baseDate) {
       setBaseDate(res.data.baseDate);
@@ -52,7 +50,7 @@ export default function RosterCycleSetup() {
       return;
     }
 
-    await axios.post(`${Roster_API_URL}/cycle-setup`, {
+    await api.post(`roster/cycle-setup`, {
       baseDate,
       groups
     });

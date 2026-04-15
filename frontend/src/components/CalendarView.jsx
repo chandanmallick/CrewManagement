@@ -17,7 +17,6 @@ import {
 } from "@mui/material";
 
 /* ✅ Correct Backend Base URL */
-const API_BASE_URL = "http://localhost:8000/roster";
 
 const CalendarView = () => {
   const [startDate, setStartDate] = useState(dayjs().subtract(2, "day"));

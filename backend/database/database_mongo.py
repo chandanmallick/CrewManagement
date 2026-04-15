@@ -1,7 +1,8 @@
 from pymongo import MongoClient
 
 # For local MongoDB
-MONGO_URI = "mongodb://localhost:27017"
+# MONGO_URI = "mongodb://localhost:27017"
+MONGO_URI = "mongodb://10.3.230.60:27017"
 
 client = MongoClient(MONGO_URI)
 
