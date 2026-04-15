@@ -8,7 +8,6 @@ const api = axios.create({
   baseURL: BASE_URL,
 });
 
-
 // ✅ REQUEST INTERCEPTOR (attach token)
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
