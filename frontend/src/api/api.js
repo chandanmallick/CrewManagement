@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "http://localhost:8000", // adjust
+  baseURL: "http://10.3.230.60:8000", // adjust
 });
 
 // ✅ REQUEST INTERCEPTOR (attach token)
