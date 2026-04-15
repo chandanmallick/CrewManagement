@@ -12,6 +12,7 @@ from api.training_assignment import router as training_ass_router
 from api.dashboard import dashboard_router
 
 
+
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
