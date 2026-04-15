@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useState, useEffect } from "react";
-import api from "../api/api";   // 🔥 add import
+import api, { BASE_URL } from "../api/api";   // 🔥 add import
 
 import {
   LayoutDashboard,
@@ -198,7 +198,6 @@ export default function Sidebar({ open, setOpen }) {
       </div>
 
 
-
       {/* ================= USER ================= */}
       <Section title="User">
         <Item to="/" icon={<LayoutDashboard size={20}/>} label="Dashboard"/>
@@ -250,7 +249,7 @@ export default function Sidebar({ open, setOpen }) {
           <Avatar
             src={
               profile.profilePhoto
-                ? `http://localhost:8000${profile.profilePhoto}`
+                ? `${BASE_URL}${profile.profilePhoto}`
                 : ""
             }
             sx={{
