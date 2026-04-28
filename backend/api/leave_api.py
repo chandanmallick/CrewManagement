@@ -19,6 +19,21 @@ import uuid
 
 router = APIRouter()
 
+def is_replacement_required(date, group_name):
+    """
+    Returns True if more than 1 person is on leave for same group/date
+    """
+
+    count = employee_daily_collection.count_documents({
+        "date": date,
+        "groupName": group_name,
+        "leaveStatus": {
+            "$in": ["Applied", "Forwarded by SIC", "Approved"]
+        }
+    })
+
+    return count > 1
+
 
 def calculate_expiry_check(expiry_date: str, leave_date: str) -> bool:
     """
@@ -480,18 +495,14 @@ def get_all_leave(fromDate: str = Query(...), toDate: str = Query(...)):
 def sic_forward_bulk(data: dict, user=Depends(get_current_user)):
 
     leaves = data.get("leaves", [])
-
-    if not leaves:
-        raise HTTPException(400, "No leave selected")
-
-    emp_id = user["employeeId"].strip()
+    actor = user["employeeId"].strip()
 
     updated_count = 0
 
     for item in leaves:
 
         leave_id = item.get("id")
-        replacement_required = item.get("replacementRequired", False)
+        user_flag = item.get("replacementRequired", False)
 
         leave = leave_request_collection.find_one({"_id": ObjectId(leave_id)})
 
@@ -501,20 +512,20 @@ def sic_forward_bulk(data: dict, user=Depends(get_current_user)):
         if leave.get("sicApprovalStatus") == "Forwarded":
             continue
 
-        duty = employee_daily_collection.find_one({
-            "employeeId": {"$regex": f"^{emp_id}\\s*$"},
-            "date": leave["date"]
-        })
+        # 🔥 AUTO RULE
+        auto_required = is_replacement_required(
+            leave["date"],
+            leave["groupName"]
+        )
 
-        if not duty or not duty.get("isSIC"):
-            continue
+        final_required = user_flag if auto_required else False
 
         leave_request_collection.update_one(
             {"_id": leave["_id"]},
             {
                 "$set": {
                     "sicApprovalStatus": "Forwarded",
-                    "replacementRequired": replacement_required,
+                    "replacementRequired": final_required,
                     "updatedOn": datetime.utcnow()
                 }
             }
@@ -526,15 +537,130 @@ def sic_forward_bulk(data: dict, user=Depends(get_current_user)):
                 "date": leave["date"]
             },
             {
-                "$set": {
-                    "leaveStatus": "Forwarded by SIC"
-                }
+                "$set": {"leaveStatus": "Forwarded by SIC"}
             }
+        )
+
+        # 🔥 FIND DEPT IC FOR THAT DATE
+        dept_ic_record = employee_daily_collection.find_one({
+            "date": leave["date"],
+            "$expr": {
+                "$eq": [
+                    {"$trim": {"input": "$departmentIC.employeeId"}},
+                    {"$trim": {"input": "$departmentIC.employeeId"}}
+                ]
+            }
+        })
+
+        dept_ic_emp = employee_collection.find_one({
+            "userId": dept_ic_record["departmentIC"]["employeeId"]
+        }) if dept_ic_record else None
+
+        dept_email = dept_ic_emp.get("gmail") if dept_ic_emp else None
+
+        # 🔥 NOTIFY DEPT IC
+        notify_all(
+            email_list=[dept_email] if dept_email else [],
+            employee_ids=[dept_ic_record["departmentIC"]["employeeId"]] if dept_ic_record else [],
+            subject="Leave Forwarded by SIC",
+            message=f"""
+            Leave forwarded for approval
+
+            Name: {leave.get('name')}
+            Date: {leave.get('date')}
+            Type: {leave.get('leaveType')}
+            """,
+            ref_id=str(leave["_id"]),
+            action="VIEW_LEAVE",
+            type="LEAVE"
         )
 
         updated_count += 1
 
     return {"message": f"{updated_count} leave(s) forwarded"}
+
+
+
+@router.put("/sic-reject-bulk")
+def sic_reject_bulk(data: dict, user=Depends(get_current_user)):
+
+    leave_ids = data.get("leaveIds", [])
+
+    if not leave_ids:
+        raise HTTPException(400, "No leave selected")
+
+    emp_id = user["employeeId"].strip()
+
+    updated = 0
+
+    for lid in leave_ids:
+
+        leave = leave_request_collection.find_one({"_id": ObjectId(lid)})
+
+        if not leave:
+            continue
+
+        # Validate SIC
+        duty = employee_daily_collection.find_one({
+            "employeeId": {"$regex": f"^{emp_id}\\s*$"},
+            "date": leave["date"]
+        })
+
+        if not duty or not duty.get("isSIC"):
+            continue
+
+        # Skip already rejected
+        if leave.get("finalStatus") == "Rejected":
+            continue
+
+        # 🔥 UPDATE
+        leave_request_collection.update_one(
+            {"_id": leave["_id"]},
+            {
+                "$set": {
+                    "sicApprovalStatus": "Rejected",
+                    "finalStatus": "Rejected",
+                    "updatedOn": datetime.utcnow()
+                }
+            }
+        )
+
+        employee_daily_collection.update_one(
+            {
+                "employeeId": leave["employeeId"],
+                "date": leave["date"]
+            },
+            {
+                "$set": {"leaveStatus": "Rejected"}
+            }
+        )
+
+        # 🔥 EMPLOYEE EMAIL
+        emp = employee_collection.find_one({
+            "userId": leave["employeeId"]
+        })
+
+        emp_email = emp.get("gmail") if emp else None
+
+        # 🔥 NOTIFY (same pattern)
+        notify_all(
+            email_list=[emp_email] if emp_email else [],
+            employee_ids=[leave["employeeId"]],
+            subject="Leave Rejected by SIC",
+            message=f"""
+            Your leave has been rejected by SIC
+
+            Date: {leave.get('date')}
+            Type: {leave.get('leaveType')}
+            """,
+            ref_id=str(leave["_id"]),
+            action="VIEW_LEAVE",
+            type="LEAVE"
+        )
+
+        updated += 1
+
+    return {"message": f"{updated} leave(s) rejected by SIC"}
 
 # =========================================================
 # APPROVE LEAVE
@@ -544,26 +670,12 @@ def sic_forward_bulk(data: dict, user=Depends(get_current_user)):
 def approve_leave_bulk(data: dict, user=Depends(get_current_user)):
 
     leave_ids = data.get("leaveIds", [])
+    override = data.get("overrideReplacement", False)
 
     if not leave_ids:
         raise HTTPException(400, "No leave selected")
 
-    emp_id = user["employeeId"].strip()
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    # ✅ DIC VALIDATION (UNCHANGED)
-    dept_ic_record = employee_daily_collection.find_one({
-        "date": today,
-        "$expr": {
-            "$eq": [
-                {"$trim": {"input": "$departmentIC.employeeId"}},
-                emp_id
-            ]
-        }
-    })
-
-    if not dept_ic_record:
-        raise HTTPException(403, "Only Department IC can approve")
+    actor = user["employeeId"].strip()
 
     updated_count = 0
 
@@ -574,40 +686,24 @@ def approve_leave_bulk(data: dict, user=Depends(get_current_user)):
         if not leave:
             continue
 
-        # ❌ skip already approved
         if leave.get("deptApprovalStatus") == "Approved":
             continue
 
-        # 🔥 HANDLE SIC CASE (IMPORTANT)
-        if leave.get("isSIC"):
+        # 🔥 VALIDATION
+        auto_required = is_replacement_required(
+            leave["date"],
+            leave["groupName"]
+        )
 
-            employee_daily_collection.update_one(
-                {
-                    "employeeId": leave["employeeId"],
-                    "date": leave["date"]
-                },
-                {
-                    "$unset": {
-                        "sic": "",
-                        "isActingSIC": ""
-                    }
-                }
-            )
+        if auto_required:
+            if leave.get("replacementRequired") and not leave.get("replacement"):
+                if not override:
+                    raise HTTPException(
+                        400,
+                        f"Replacement missing for {leave['date']}"
+                    )
 
-        # 🔥 HANDLE C-OFF REDEMPTION (IMPORTANT)
-        if leave.get("leaveType") == "C-OFF" and leave.get("compOffId"):
-
-            compensatory_off_collection.update_one(
-                {"_id": ObjectId(leave["compOffId"])},
-                {
-                    "$set": {
-                        "status": "Used",
-                        "usedDate": leave.get("date")
-                    }
-                }
-            )
-
-        # ✅ APPROVE THIS SINGLE DATE ONLY
+        # 🔥 APPROVE
         leave_request_collection.update_one(
             {"_id": leave["_id"]},
             {
@@ -629,23 +725,108 @@ def approve_leave_bulk(data: dict, user=Depends(get_current_user)):
             }
         )
 
+        # 🔥 GET EMP EMAIL
+        emp = employee_collection.find_one({
+            "userId": leave["employeeId"]
+        })
+
+        emp_email = emp.get("gmail") if emp else None
+
+        # 🔥 NOTIFY EMPLOYEE
+        notify_all(
+            email_list=[emp_email] if emp_email else [],
+            employee_ids=[leave["employeeId"]],
+            subject="Leave Approved",
+            message=f"""
+            Your leave has been approved
+
+            Date: {leave.get('date')}
+            Type: {leave.get('leaveType')}
+            """,
+            ref_id=str(leave["_id"]),
+            action="VIEW_LEAVE",
+            type="LEAVE"
+        )
+
         updated_count += 1
 
     if updated_count == 0:
         raise HTTPException(400, "No valid leaves approved")
 
-    # 🔥 SINGLE NOTIFICATION (OPTIONAL IMPROVEMENT)
-    notify_all(
-        email_list=[],
-        employee_ids=[],
-        subject="Leave Approved (Partial)",
-        message=f"{updated_count} leave(s) approved",
-        ref_id=str(lid),
-        action="VIEW_LEAVE",
-        type="LEAVE"
-    )
-
     return {"message": f"{updated_count} leave(s) approved"}
+
+
+
+@router.put("/reject-bulk")
+def reject_bulk(data: dict, user=Depends(get_current_user)):
+
+    leave_ids = data.get("leaveIds", [])
+
+    if not leave_ids:
+        raise HTTPException(400, "No leave selected")
+
+    actor = user["employeeId"]
+
+    updated = 0
+
+    for lid in leave_ids:
+
+        leave = leave_request_collection.find_one({"_id": ObjectId(lid)})
+
+        if not leave:
+            continue
+
+        if leave.get("finalStatus") == "Rejected":
+            continue
+
+        # 🔥 UPDATE DB
+        leave_request_collection.update_one(
+            {"_id": leave["_id"]},
+            {
+                "$set": {
+                    "deptApprovalStatus": "Rejected",
+                    "finalStatus": "Rejected",
+                    "updatedOn": datetime.utcnow()
+                }
+            }
+        )
+
+        employee_daily_collection.update_one(
+            {
+                "employeeId": leave["employeeId"],
+                "date": leave["date"]
+            },
+            {
+                "$set": {"leaveStatus": "Rejected"}
+            }
+        )
+
+        # 🔥 GET EMP EMAIL
+        emp = employee_collection.find_one({
+            "userId": leave["employeeId"]
+        })
+
+        emp_email = emp.get("gmail") if emp else None
+
+        # 🔥 NOTIFY
+        notify_all(
+            email_list=[emp_email] if emp_email else [],
+            employee_ids=[leave["employeeId"]],
+            subject="Leave Rejected",
+            message=f"""
+            Your leave has been rejected
+
+            Date: {leave.get('date')}
+            Type: {leave.get('leaveType')}
+            """,
+            ref_id=str(leave["_id"]),
+            action="VIEW_LEAVE",
+            type="LEAVE"
+        )
+
+        updated += 1
+
+    return {"message": f"{updated} leave(s) rejected"}
 
 
 #######################################

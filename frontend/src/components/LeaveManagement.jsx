@@ -814,16 +814,55 @@ export default function LeaveManagement() {
                   />
                 )}
 
-                {role.isDeptIC && (
+                {role.isSIC && (
                   <ModernButton
-                    id="bulk-reject"
-                    label="Reject"
+                    id="bulk-sic-reject"
+                    label="Reject (SIC)"
                     color="#d32f2f"
                     onClick={async () => {
 
-                      for (let id of selectedLeaves) {
-                        await api.put(`/leave/dept-reject/${id}`);
+                      if (selectedLeaves.length === 0) {
+                        setStatusPopup({
+                          open: true,
+                          type: "error",
+                          message: "No leave selected"
+                        });
+                        return;
                       }
+
+                      if (!window.confirm("Reject selected leaves as SIC?")) return;
+
+                      await api.put("/leave/sic-reject-bulk", {
+                        leaveIds: selectedLeaves
+                      });
+
+                      fetchLeaveList();
+                      setSelectedLeaves([]);
+                    }}
+                  />
+                )}
+
+                {role.isDeptIC && (
+                  <ModernButton
+                    id="bulk-reject"
+                    label="Reject (Dept)"
+                    color="#b71c1c"
+                    onClick={async () => {
+
+                      if (selectedLeaves.length === 0) {
+                        setStatusPopup({
+                          open: true,
+                          type: "error",
+                          message: "No leave selected"
+                        });
+                        return;
+                      }
+
+                      if (!window.confirm("Reject selected leaves as Department IC?")) return;
+
+                      await api.put("/leave/reject-bulk", {
+                        leaveIds: selectedLeaves
+                      });
 
                       fetchLeaveList();
                       setSelectedLeaves([]);
