@@ -58,9 +58,30 @@ export default function Sidebar({ open, setOpen }) {
     window.location.reload();
   };
 
-  const handleNotificationClick = (n) => {
+  // Locate this around line 105 in Sidebar.jsx
+  const handleNotificationClick = async (n) => {
+    // 1. Close the pop-up immediately
+    setNotifOpen(false);
+
+    // 2. Route based on the action type provided by the backend
     if (n.action === "VIEW_LEAVE") {
-      navigate(`/leave/${n.refId}`);
+      navigate(`/leave`); 
+    } else if (n.action === "VIEW_PROFILE") {
+      navigate(`/profile`);
+    } else if (n.refId) {
+      // General purpose redirection if a specific ID is present
+      navigate(`${n.path || '/dashboard'}/${n.refId}`);
+    }
+
+    // 3. Mark the notification as read in the database
+    try {
+      await api.patch(`/notifications/${n._id}`, { status: "Read" });
+      // Update local state to clear the badge count
+      setNotifications(prev => 
+        prev.map(notif => notif._id === n._id ? { ...notif, status: "Read" } : notif)
+      );
+    } catch (err) {
+      console.error("Failed to update notification status", err);
     }
   };
 
@@ -103,19 +124,53 @@ export default function Sidebar({ open, setOpen }) {
           </Badge>
         </IconButton>
         
+        {/* Around line 155 in Sidebar.jsx */}
         {notifOpen && (
-          <div className="notification-dropdown">
+          <div
+            style={{
+              position: "fixed",         // Landmark: Use fixed to float over the layout
+              top: "70px",
+              left: open ? "260px" : "80px", // Landmark: Adjust based on sidebar 'open' state
+              width: "300px",
+              background: "#ffffff",
+              borderRadius: "12px",
+              boxShadow: "0 12px 28px rgba(0,0,0,0.2)",
+              padding: "15px",
+              zIndex: 2000,              // Landmark: High z-index to stay on top
+              border: "1px solid #e0e0e0"
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px" }}>
+              <span style={{ fontWeight: 700, fontSize: "14px" }}>Notifications</span>
+              <span 
+                onClick={() => setNotifOpen(false)} 
+                style={{ cursor: "pointer", color: "#999", fontSize: "12px" }}
+              >
+                Dismiss
+              </span>
+            </div>
+
             {notifications.length === 0 ? (
-              <div style={{ padding: "10px", color: "#888" }}>No notifications</div>
+              <div style={{ textAlign: "center", color: "#888", padding: "10px" }}>
+                No new alerts
+              </div>
             ) : (
               notifications.slice(0, 5).map(n => (
                 <div
                   key={n._id}
                   onClick={() => handleNotificationClick(n)}
-                  className={`notif-item ${n.status === "Unread" ? "unread" : ""}`}
+                  className="notif-item" // Add hover effects in your CSS
+                  style={{
+                    padding: "10px",
+                    borderRadius: "8px",
+                    marginBottom: "8px",
+                    cursor: "pointer",
+                    background: n.status === "Unread" ? "#f0f7ff" : "#fff",
+                    borderLeft: n.status === "Unread" ? "4px solid #1976d2" : "1px solid #eee"
+                  }}
                 >
-                  <div className="notif-title">{n.title}</div>
-                  <div className="notif-msg">{n.message}</div>
+                  <div style={{ fontWeight: 600, fontSize: "13px", color: "#333" }}>{n.title}</div>
+                  <div style={{ fontSize: "12px", color: "#666" }}>{n.message}</div>
                 </div>
               ))
             )}
