@@ -38,6 +38,9 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 export default function LeaveManagement() {
 
   const [employees, setEmployees] = useState([]);
+  // Add these to your state hooks
+  const [isContinuous, setIsContinuous] = useState(false); // Keyword: isContinuous
+  const [selectionRange, setSelectionRange] = useState({ start: null, end: null });
   const [leaveTypes, setLeaveTypes] = useState([]);
 
   const [selectedEmp, setSelectedEmp] = useState(null);
@@ -523,6 +526,7 @@ export default function LeaveManagement() {
               )}
             />
           </Grid>
+          
 
           <Grid item xs={12} md={5}>
             <DatePicker
